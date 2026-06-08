@@ -30,42 +30,26 @@ type SearchOptions struct {
 }
 
 type Result struct {
-	Slug       string  `json:"slug"`
-	Title      string  `json:"title"`
-	ChunkIndex int     `json:"chunk_index"`
-	Snippet    string  `json:"snippet"`
-	Score      float64 `json:"score"`
+	Slug    string  `json:"slug"`
+	Title   string  `json:"title"`
+	Chunk   int     `json:"chunk"`
+	Snippet string  `json:"snippet"`
+	Score   float64 `json:"score"`
 }
 
-type Citation struct {
-	Slug       string  `json:"slug"`
-	Title      string  `json:"title"`
-	Path       string  `json:"path"`
-	ChunkIndex int     `json:"chunk_index"`
-	Snippet    string  `json:"snippet"`
-	Score      float64 `json:"score"`
+type SearchStats struct {
+	Pages  int    `json:"pages"`
+	Chunks int    `json:"chunks"`
+	Mode   string `json:"mode"`
 }
 
-type RetrievalDiagnostics struct {
-	PagesFromBM25  int    `json:"pages_from_bm25"`
-	ChunksFromBM25 int    `json:"chunks_from_bm25"`
-	Mode           string `json:"mode"`
+type SearchResponse struct {
+	Query    string      `json:"query"`
+	Limit    int         `json:"limit"`
+	Results  []Result    `json:"results"`
+	Stats    SearchStats `json:"stats"`
+	Warnings []string    `json:"warnings,omitempty"`
 }
-
-type RetrievalContext struct {
-	Query          string               `json:"query"`
-	Context        string               `json:"context"`
-	Citations      []Citation           `json:"citations"`
-	PagesGathered  int                  `json:"pages_gathered"`
-	ChunksGathered int                  `json:"chunks_gathered"`
-	Warnings       []string             `json:"warnings"`
-	Diagnostics    RetrievalDiagnostics `json:"diagnostics"`
-	Results        []Result             `json:"results"`
-}
-
-// SearchContext is kept as a compatibility alias. It is a retrieval envelope:
-// no answer synthesis, gap analysis, or chat-model call has run.
-type SearchContext = RetrievalContext
 
 type ReindexOptions struct{}
 

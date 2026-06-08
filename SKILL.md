@@ -97,56 +97,43 @@ Limit results:
 
 ```bash
 jazmem --limit 5 "Alice open loops"
+jazmem "Alice open loops" --limit 5
 ```
 
-Print assembled context text:
+Print human-readable text:
 
 ```bash
 jazmem --text "what is open for Alice"
 ```
 
-Search returns a retrieval envelope. It does not call an LLM yet.
+Search returns compact ranked chunks. It does not call an LLM.
 
 ```json
 {
   "query": "Alice Riley Acme",
-  "context": "# Retrieved Memory Context\n...",
-  "citations": [
-    {
-      "slug": "people/alice",
-      "title": "Alice Smith",
-      "path": "/Users/wins/.jaz/memory/people/alice.md",
-      "chunk_index": 0,
-      "snippet": "Alice and [Riley] are friends...",
-      "score": -0.00000157
-    }
-  ],
-  "pages_gathered": 1,
-  "chunks_gathered": 1,
-  "warnings": [],
-  "diagnostics": {
-    "pages_from_bm25": 1,
-    "chunks_from_bm25": 1,
-    "mode": "bm25"
-  },
+  "limit": 5,
   "results": [
     {
       "slug": "people/alice",
       "title": "Alice Smith",
-      "chunk_index": 0,
+      "chunk": 0,
       "snippet": "Alice and [Riley] are friends...",
       "score": -0.00000157
     }
-  ]
+  ],
+  "stats": {
+    "pages": 1,
+    "chunks": 1,
+    "mode": "bm25"
+  }
 }
 ```
 
 Interpretation:
 
-- `context` is assembled retrieval context for the agent or model to read.
-- `citations` are the grounding chunks; cite their slugs when answering.
-- `pages_gathered` counts unique pages in the BM25 result set.
-- `chunks_gathered` counts matched chunks.
+- `results` are the grounding chunks; cite their slugs when answering.
+- `stats.pages` counts unique pages in the BM25 result set.
+- `stats.chunks` counts matched chunks.
 - `score` is SQLite BM25. Lower is better.
 - `title` comes from frontmatter `title`, then first `# H1`, then slug tail.
 - `slug` is the markdown path under root without `.md`.
@@ -436,14 +423,12 @@ Notability gate:
 
 ## Response Types
 
-`jazmem <query>` and `jazmem search <query>` return `RetrievalContext`:
+`jazmem <query>` and `jazmem search <query>` return `SearchResponse`:
 
 - `query`: original query
-- `context`: assembled markdown-style context
-- `citations`: slug/path/snippet refs
-- `pages_gathered`, `chunks_gathered`: retrieval counts
-- `diagnostics`: retrieval source counts and mode
-- `results`: raw ranked BM25 chunk hits
+- `limit`: requested result limit
+- `results`: ranked BM25 chunk hits
+- `stats`: unique page count, chunk count, and retrieval mode
 
 `jazmem get <slug>` returns `Page`:
 

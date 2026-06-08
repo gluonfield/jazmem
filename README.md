@@ -14,7 +14,7 @@ It has the right substrate for a smaller, cleaner version:
 - git history for markdown memory
 - SQLite FTS5/BM25 search through `modernc.org/sqlite`
 - wikilink and mention extraction
-- retrieval context with citations and diagnostics
+- compact search responses with slugs, snippets, and stats
 - simple scheduler/dream/link-hygiene scaffolding
 
 The gbrain features most likely to matter for retrieval quality are:
@@ -171,26 +171,30 @@ Useful locations:
 
 ## Search API Shape
 
-`jazmem search` returns `RetrievalContext`:
+`jazmem search` returns `SearchResponse`:
 
 ```json
 {
   "query": "Ink enterprise Claude deployment",
-  "context": "# Retrieved Memory Context\n...",
-  "citations": [],
-  "pages_gathered": 0,
-  "chunks_gathered": 0,
-  "warnings": [],
-  "diagnostics": {
-    "pages_from_bm25": 0,
-    "chunks_from_bm25": 0,
+  "limit": 5,
+  "results": [
+    {
+      "slug": "concepts/ink-enterprise-deployment-strategy",
+      "title": "Ink Enterprise Deployment Strategy",
+      "chunk": 0,
+      "snippet": "Strongest current enterprise wedge...",
+      "score": -4.79975572
+    }
+  ],
+  "stats": {
+    "pages": 1,
+    "chunks": 1,
     "mode": "bm25"
-  },
-  "results": []
+  }
 }
 ```
 
-This is retrieval context, not answer synthesis. No chat model is called.
+This is ranked chunk retrieval, not answer synthesis. No chat model is called.
 
 ## What Is Not Implemented Yet
 

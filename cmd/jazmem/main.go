@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/wins/jazmem/pkg/jazmem"
@@ -112,21 +113,13 @@ func runIndex(args []string) error {
 }
 
 func runSearch(args []string) error {
-	fs := flag.NewFlagSet("search", flag.ContinueOnError)
-	root := fs.String("root", "", rootHelp)
-	path := fs.String("path", "", "alias for --root")
-	db := fs.String("db", "", dbHelp)
-	limit := fs.Int("limit", 10, "maximum results")
-	text := fs.Bool("text", false, "print assembled context text instead of JSON")
-	if err := fs.Parse(args); err != nil {
-		return err
+	cfg, query, limit, text, err := parseSearchArgs(args)
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
 	}
-	selectedRoot, err := resolveRootArg(*root, *path, nil)
 	if err != nil {
 		return err
 	}
-	cfg := jazmem.Config{Root: selectedRoot, DBPath: *db}
-	query := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if query == "" {
 		return errors.New("search query is required")
 	}
@@ -135,15 +128,96 @@ func runSearch(args []string) error {
 		return err
 	}
 	defer m.Close()
-	result, err := m.Retrieve(context.Background(), query, jazmem.SearchOptions{Limit: *limit})
+	result, err := m.Retrieve(context.Background(), query, jazmem.SearchOptions{Limit: limit})
 	if err != nil {
 		return err
 	}
-	if *text {
-		fmt.Print(result.Context)
+	if text {
+		fmt.Print(jazmem.RenderSearchText(result))
 		return nil
 	}
 	return printJSON(result)
+}
+
+func parseSearchArgs(args []string) (jazmem.Config, string, int, bool, error) {
+	var root, path, db string
+	limit := 10
+	text := false
+	var query []string
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch {
+		case arg == "":
+			continue
+		case arg == "--":
+			query = append(query, args[i+1:]...)
+			i = len(args)
+		case arg == "-text" || arg == "--text":
+			text = true
+		case arg == "-h" || arg == "--help":
+			usage(os.Stdout)
+			return jazmem.Config{}, "", 0, text, flag.ErrHelp
+		case strings.HasPrefix(arg, "-limit=") || strings.HasPrefix(arg, "--limit="):
+			value := strings.TrimPrefix(strings.TrimPrefix(arg, "--limit="), "-limit=")
+			parsed, err := parseLimit(value)
+			if err != nil {
+				return jazmem.Config{}, "", 0, false, err
+			}
+			limit = parsed
+		case arg == "-limit" || arg == "--limit":
+			if i+1 >= len(args) {
+				return jazmem.Config{}, "", 0, false, errors.New("limit value is required")
+			}
+			parsed, err := parseLimit(args[i+1])
+			if err != nil {
+				return jazmem.Config{}, "", 0, false, err
+			}
+			limit = parsed
+			i++
+		case strings.HasPrefix(arg, "-root=") || strings.HasPrefix(arg, "--root="):
+			root = strings.TrimPrefix(strings.TrimPrefix(arg, "--root="), "-root=")
+		case arg == "-root" || arg == "--root":
+			if i+1 >= len(args) {
+				return jazmem.Config{}, "", 0, false, errors.New("root value is required")
+			}
+			root = args[i+1]
+			i++
+		case strings.HasPrefix(arg, "-path=") || strings.HasPrefix(arg, "--path="):
+			path = strings.TrimPrefix(strings.TrimPrefix(arg, "--path="), "-path=")
+		case arg == "-path" || arg == "--path":
+			if i+1 >= len(args) {
+				return jazmem.Config{}, "", 0, false, errors.New("path value is required")
+			}
+			path = args[i+1]
+			i++
+		case strings.HasPrefix(arg, "-db=") || strings.HasPrefix(arg, "--db="):
+			db = strings.TrimPrefix(strings.TrimPrefix(arg, "--db="), "-db=")
+		case arg == "-db" || arg == "--db":
+			if i+1 >= len(args) {
+				return jazmem.Config{}, "", 0, false, errors.New("db value is required")
+			}
+			db = args[i+1]
+			i++
+		default:
+			query = append(query, arg)
+		}
+	}
+	selectedRoot, err := resolveRootArg(root, path, nil)
+	if err != nil {
+		return jazmem.Config{}, "", 0, false, err
+	}
+	return jazmem.Config{Root: selectedRoot, DBPath: db}, strings.TrimSpace(strings.Join(query, " ")), limit, text, nil
+}
+
+func parseLimit(value string) (int, error) {
+	limit, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return 0, err
+	}
+	if limit <= 0 {
+		return 0, errors.New("limit must be positive")
+	}
+	return limit, nil
 }
 
 func runGet(args []string) error {

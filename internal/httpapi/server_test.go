@@ -40,15 +40,15 @@ func TestSearchEndpoint(t *testing.T) {
 	if searchResp.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", searchResp.Code, searchResp.Body.String())
 	}
-	var payload jazmem.RetrievalContext
+	var payload jazmem.SearchResponse
 	if err := json.Unmarshal(searchResp.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
 	if len(payload.Results) != 1 || payload.Results[0].Title != "Search note" {
 		t.Fatalf("unexpected results %#v", payload.Results)
 	}
-	if payload.Query != "jazmem" || payload.PagesGathered != 1 || len(payload.Citations) != 1 || payload.Context == "" {
-		t.Fatalf("unexpected context envelope %#v", payload)
+	if payload.Query != "jazmem" || payload.Limit != 3 || payload.Stats.Pages != 1 || payload.Stats.Chunks != 1 || payload.Stats.Mode != "bm25" {
+		t.Fatalf("unexpected search envelope %#v", payload)
 	}
 }
 
