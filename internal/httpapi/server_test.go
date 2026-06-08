@@ -1,0 +1,86 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/wins/jazmem/pkg/jazmem"
+)
+
+func TestSearchEndpoint(t *testing.T) {
+	mem, err := jazmem.Open(jazmem.Config{
+		Root:   t.TempDir(),
+		DBPath: filepath.Join(t.TempDir(), "index.sqlite"),
+		Now: func() time.Time {
+			return time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mem.Close()
+
+	handler := New(mem)
+	path := filepath.Join(mem.Root(), "inbox", "search-note.md")
+	if err := os.WriteFile(path, []byte("---\ntitle: Search note\ntype: inbox\n---\n\n# Search note\n\nAlice and Riley are testing jazmem search.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.Reindex(t.Context(), jazmem.ReindexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	searchReq := httptest.NewRequest(http.MethodGet, "/search?q=jazmem&limit=3", nil)
+	searchResp := httptest.NewRecorder()
+	handler.ServeHTTP(searchResp, searchReq)
+	if searchResp.Code != http.StatusOK {
+		t.Fatalf("search status = %d body=%s", searchResp.Code, searchResp.Body.String())
+	}
+	var payload jazmem.RetrievalContext
+	if err := json.Unmarshal(searchResp.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Results) != 1 || payload.Results[0].Title != "Search note" {
+		t.Fatalf("unexpected results %#v", payload.Results)
+	}
+	if payload.Query != "jazmem" || payload.PagesGathered != 1 || len(payload.Citations) != 1 || payload.Context == "" {
+		t.Fatalf("unexpected context envelope %#v", payload)
+	}
+}
+
+func TestFileEndpointSuggestsSimilarSlugs(t *testing.T) {
+	mem, err := jazmem.Open(jazmem.Config{
+		Root:   t.TempDir(),
+		DBPath: filepath.Join(t.TempDir(), "index.sqlite"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mem.Close()
+
+	path := filepath.Join(mem.Root(), "people", "alice-bentick.md")
+	if err := os.WriteFile(path, []byte("---\ntitle: Alice Bentick\naliases: [Alice]\n---\n\n# Alice Bentick\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/file/people/alice", nil)
+	resp := httptest.NewRecorder()
+	New(mem).ServeHTTP(resp, req)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("status = %d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Error       string                  `json:"error"`
+		Suggestions []jazmem.SlugSuggestion `json:"suggestions"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Error != "not found: people/alice" || len(payload.Suggestions) == 0 || payload.Suggestions[0].Slug != "people/alice-bentick" {
+		t.Fatalf("unexpected payload %#v", payload)
+	}
+}
