@@ -45,6 +45,9 @@ func run(args []string) error {
 		return errors.New("command is required")
 	}
 	switch args[0] {
+	case "-h", "--help", "help":
+		usage(os.Stdout)
+		return nil
 	case "init":
 		return runInit(args[1:])
 	case "index":

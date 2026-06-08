@@ -1,6 +1,6 @@
 ---
 name: jazmem
-description: Use jazmem CLI and markdown memory. Trigger when searching, reading, citing, capturing, storing, organizing, reindexing, or maintaining durable personal memory in jazmem.
+description: Use jazmem CLI and markdown memory. Trigger when searching, reading, citing, storing, organizing, reindexing, or maintaining durable personal memory in jazmem.
 ---
 
 # Jazmem
@@ -13,7 +13,7 @@ Use this skill whenever personal context may matter, whenever the user asks you 
 
 - Check memory before answering questions about people, projects, preferences, prior decisions, open loops, and "what do we know" topics.
 - Ground memory-based claims in citations. If memory is missing or thin, say so.
-- Preserve the user's original wording when capturing ideas, preferences, decisions, and concerns.
+- Preserve the user's original wording when storing ideas, preferences, decisions, and concerns.
 - Store uncertain material in `inbox/`; promote only durable, sourced facts to canonical pages.
 - Use wikilinks for durable relationships and important references.
 - After writing or editing markdown, run `jazmem index` and verify with search.
