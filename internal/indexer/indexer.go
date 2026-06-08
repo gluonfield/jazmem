@@ -25,14 +25,16 @@ type Report struct {
 	PageCount       int `json:"page_count"`
 	ChunkCount      int `json:"chunk_count"`
 	ExplicitLinks   int `json:"explicit_links"`
+	TypedLinks      int `json:"typed_links"`
 	MentionLinks    int `json:"mention_links"`
 	UnresolvedLinks int `json:"unresolved_links"`
 }
 
 type ExplicitLink struct {
-	Target  string
-	Display string
-	Context string
+	Target          string
+	Display         string
+	Context         string
+	InRelationships bool
 }
 
 func (i *Indexer) Reindex(ctx context.Context) (Report, error) {
@@ -112,6 +114,11 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 				Context:    link.Context,
 			})
 			report.ExplicitLinks++
+			if link.InRelationships {
+				typed := inferTypedLinks(page.Slug, target, link)
+				data.Links = append(data.Links, typed...)
+				report.TypedLinks += len(typed)
+			}
 		}
 
 		for _, mention := range detectMentions(page, clean, gazetteer) {
@@ -139,23 +146,40 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 }
 
 func ExtractExplicitLinks(body string) []ExplicitLink {
-	matches := wikiLinkRE.FindAllStringSubmatchIndex(body, -1)
-	links := make([]ExplicitLink, 0, len(matches))
-	for _, match := range matches {
-		target := body[match[2]:match[3]]
-		display := ""
-		if match[4] >= 0 {
-			display = body[match[4]:match[5]]
+	var links []ExplicitLink
+	relationshipLevel := 0
+	for _, line := range strings.Split(body, "\n") {
+		if level, heading := markdownHeading(line); level > 0 {
+			switch {
+			case heading == "relationships" || heading == "relations":
+				relationshipLevel = level
+			case relationshipLevel > 0 && level <= relationshipLevel:
+				relationshipLevel = 0
+			}
 		}
-		target = strings.TrimSpace(strings.SplitN(target, "#", 2)[0])
-		if target == "" {
-			continue
+		matches := wikiLinkRE.FindAllStringSubmatchIndex(line, -1)
+		for _, match := range matches {
+			target := line[match[2]:match[3]]
+			display := ""
+			if match[4] >= 0 {
+				display = line[match[4]:match[5]]
+			}
+			target = strings.TrimSpace(strings.SplitN(target, "#", 2)[0])
+			if target == "" {
+				continue
+			}
+			context := strings.TrimSpace(line)
+			context = strings.Join(strings.Fields(context), " ")
+			if len(context) > 240 {
+				context = context[:240]
+			}
+			links = append(links, ExplicitLink{
+				Target:          target,
+				Display:         strings.TrimSpace(display),
+				Context:         context,
+				InRelationships: relationshipLevel > 0 && !sourceMarkerBefore(line, match[0]),
+			})
 		}
-		links = append(links, ExplicitLink{
-			Target:  target,
-			Display: strings.TrimSpace(display),
-			Context: contextAround(body, match[0], match[1]),
-		})
 	}
 	return links
 }
@@ -331,6 +355,116 @@ func detectMentions(page memfs.Page, body string, entries []gazetteerEntry) []sq
 	return out
 }
 
+type relationSpec struct {
+	Type      string
+	Symmetric bool
+	Orient    string
+}
+
+func inferTypedLinks(fromSlug, toSlug string, link ExplicitLink) []sqlitestore.LinkRecord {
+	spec := inferRelation(link.Context)
+	if spec.Type == "" {
+		return nil
+	}
+	if !isTypedRelationshipNode(fromSlug) || !isTypedRelationshipNode(toSlug) {
+		return nil
+	}
+	if spec.Type == "friend" && (!isPersonSlug(fromSlug) || !isPersonSlug(toSlug)) {
+		return nil
+	}
+	context := strings.TrimSpace(link.Context)
+	display := strings.TrimSpace(link.Display)
+	if display == "" {
+		display = slugTail(toSlug)
+	}
+	makeRecord := func(from, to string) sqlitestore.LinkRecord {
+		return sqlitestore.LinkRecord{
+			FromSlug:   from,
+			ToSlug:     to,
+			LinkType:   spec.Type,
+			LinkSource: "relationship",
+			Display:    display,
+			Context:    context,
+		}
+	}
+	if spec.Symmetric {
+		return []sqlitestore.LinkRecord{
+			makeRecord(fromSlug, toSlug),
+			makeRecord(toSlug, fromSlug),
+		}
+	}
+	from, to := orientRelationship(fromSlug, toSlug, spec.Orient)
+	if from == "" || to == "" || from == to {
+		return nil
+	}
+	return []sqlitestore.LinkRecord{makeRecord(from, to)}
+}
+
+func inferRelation(context string) relationSpec {
+	text := strings.ToLower(context)
+	switch {
+	case containsAny(text, "friend", "friends"):
+		return relationSpec{Type: "friend", Symmetric: true}
+	case containsAny(text, "works with", "worked with", "collaborates", "collaborator", "collaboration"):
+		return relationSpec{Type: "works_with", Symmetric: true}
+	case containsAny(text, "works at", "works for", "worked at", "worked for", "employed by", "employee at"):
+		return relationSpec{Type: "works_at", Orient: "person_to_org"}
+	case containsAny(text, "founded", "founder", "co-founder", "cofounder", "started"):
+		return relationSpec{Type: "founder_of", Orient: "actor_to_org"}
+	case containsAny(text, "invested in", "invests in", "investor", "investment"):
+		return relationSpec{Type: "invested_in", Orient: "actor_to_org"}
+	case containsAny(text, "advises", "advised", "advisor", "advisory", "board member", "on the board"):
+		return relationSpec{Type: "advises", Orient: "actor_to_org"}
+	default:
+		return relationSpec{}
+	}
+}
+
+func orientRelationship(fromSlug, toSlug, orient string) (string, string) {
+	switch orient {
+	case "person_to_org":
+		if isPersonSlug(fromSlug) && isOrgSlug(toSlug) {
+			return fromSlug, toSlug
+		}
+		if isPersonSlug(toSlug) && isOrgSlug(fromSlug) {
+			return toSlug, fromSlug
+		}
+	case "actor_to_org":
+		if isActorSlug(fromSlug) && isOrgSlug(toSlug) {
+			return fromSlug, toSlug
+		}
+		if isActorSlug(toSlug) && isOrgSlug(fromSlug) {
+			return toSlug, fromSlug
+		}
+	}
+	return fromSlug, toSlug
+}
+
+func containsAny(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPersonSlug(slug string) bool {
+	return strings.HasPrefix(slug, "people/")
+}
+
+func isOrgSlug(slug string) bool {
+	return strings.HasPrefix(slug, "companies/") || strings.HasPrefix(slug, "projects/")
+}
+
+func isActorSlug(slug string) bool {
+	return isPersonSlug(slug) || strings.HasPrefix(slug, "companies/")
+}
+
+func isTypedRelationshipNode(slug string) bool {
+	return isPersonSlug(slug) || isOrgSlug(slug) || strings.HasPrefix(slug, "concepts/")
+}
+
 func aliasesForPage(page memfs.Page) []string {
 	values := append([]string{page.Title, slugTail(page.Slug)}, page.Aliases...)
 	var out []string
@@ -394,6 +528,33 @@ func contextAround(body string, start, end int) string {
 	return context
 }
 
+func markdownHeading(line string) (int, string) {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "#") {
+		return 0, ""
+	}
+	level := 0
+	for level < len(trimmed) && level < 6 && trimmed[level] == '#' {
+		level++
+	}
+	if level == 0 || level >= len(trimmed) || trimmed[level] != ' ' {
+		return 0, ""
+	}
+	heading := strings.TrimSpace(trimmed[level:])
+	heading = strings.TrimSpace(headingHashSuffixRE.ReplaceAllString(heading, ""))
+	heading = strings.ToLower(heading)
+	heading = strings.Join(strings.Fields(heading), " ")
+	return level, heading
+}
+
+func sourceMarkerBefore(line string, offset int) bool {
+	if offset <= 0 {
+		return false
+	}
+	prefix := strings.ToLower(line[:offset])
+	return strings.Contains(prefix, "[source:") || strings.Contains(prefix, "source:")
+}
+
 func appendUnique(values []string, value string) []string {
 	for _, existing := range values {
 		if existing == value {
@@ -408,4 +569,6 @@ var (
 	fencedCodeRE = regexp.MustCompile("(?s)```.*?```")
 	inlineCodeRE = regexp.MustCompile("`[^`]*`")
 	paragraphRE  = regexp.MustCompile(`\n{2,}`)
+
+	headingHashSuffixRE = regexp.MustCompile(`\s+#+\s*$`)
 )

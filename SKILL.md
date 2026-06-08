@@ -113,7 +113,7 @@ jazmem --agentic "what do we know about Alice"
 jazmem --agentic --text "what is open for Alice"
 ```
 
-Raw search returns compact ranked pages with matched chunks merged under each page. It uses title/alias candidates, BM25 chunks, and one-hop memlink/backlink expansion. It does not call an LLM.
+Raw search returns compact ranked pages with matched chunks merged under each page. It uses title/alias candidates, BM25 chunks with per-page max-pool, typed relationship retrieval, and one-hop memlink/backlink expansion. It does not call an LLM.
 
 ```json
 {
@@ -176,6 +176,8 @@ Pick queries based on the question:
 
 - Person context: `jazmem "Alice preferences decisions open loops"`
 - Relationship lookup: `jazmem "Alice Riley friends"`
+- Typed relationship lookup: `jazmem "who works at Acme"`
+- Connection lookup: `jazmem "what connects Alice and Riley"`
 - Project context: `jazmem "jazmem sqlite bm25 vector"`
 - Recent inbox/source note: `jazmem "Acme launch timeline"`
 - Agent trace: `jazmem "agent solved problem failure fix"`
@@ -417,6 +419,36 @@ Use `## Relationships` for stable relationships only:
 - [[people/riley]] - friend. [Source: [[inbox/2026-06-08-lunch-note]], 2026-06-08]
 ```
 
+Jazmem indexes typed relationship edges from explicit wikilinks inside `## Relationships` sections. Supported v1 labels:
+
+- `works at` -> `works_at`
+- `works with` / `collaborator` -> `works_with`
+- `founder` / `founded` -> `founder_of`
+- `invested in` / `investor` -> `invested_in`
+- `advisor` / `advises` -> `advises`
+- `friend` -> `friend`
+
+Write the relationship in the same bullet line as the wikilink:
+
+```md
+## Relationships
+
+- [[companies/acme]] - works at. [Source: User, chat, 2026-06-08]
+- [[companies/widget-co]] - invested in. [Source: User, chat, 2026-06-08]
+- [[people/riley]] - friend. [Source: User, chat, 2026-06-08]
+```
+
+Relational queries are deterministic and do not call an LLM:
+
+```bash
+jazmem "who works at Acme"
+jazmem "who invested in Widget Co"
+jazmem "who founded Widget Co"
+jazmem "what companies has Alice invested in"
+jazmem "who are Alice's friends"
+jazmem "what connects Alice and Widget Co"
+```
+
 Rules:
 
 - Do not create reciprocal relationship bullets for ordinary mentions.
@@ -485,6 +517,8 @@ Notability gate:
 - `files_added`
 
 `jazmem index`, `jazmem dream`, `jazmem link-hygiene`, and `jazmem doctor` return JSON reports.
+
+`jazmem index` includes `typed_links`; `jazmem doctor` includes `typed_link_count`.
 
 ## Maintenance
 

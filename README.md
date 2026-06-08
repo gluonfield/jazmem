@@ -15,7 +15,7 @@ It has the right substrate for a smaller, cleaner version:
 - SQLite FTS5/BM25 search through `modernc.org/sqlite`
 - wikilink and mention extraction
 - compact search responses with page results, matched chunks, and stats
-- title/alias candidate generation and one-hop memlink/backlink expansion
+- title/alias candidate generation, typed relationship retrieval, and one-hop memlink/backlink expansion
 - simple scheduler/dream/link-hygiene scaffolding
 
 The gbrain features most likely to matter for retrieval quality are:
@@ -28,7 +28,7 @@ The gbrain features most likely to matter for retrieval quality are:
 6. Incremental indexing: required once the corpus grows, but not the main quality driver.
 7. Dream consolidation: useful only if it edits canonical pages conservatively with citations and review queues.
 
-Current jazmem retrieval uses title/alias matching, BM25 chunks, page-level merging, and one-hop memlink/backlink expansion. It does not use embeddings, a reranker, or a chat-model synthesizer.
+Current jazmem retrieval uses title/alias matching, BM25 chunks with per-page max-pool, typed relationship retrieval, page-level merging, and one-hop memlink/backlink expansion. It does not use embeddings, a reranker, or a chat-model synthesizer.
 
 Do not copy gbrain wholesale. These are not v1 performance requirements for jazmem:
 
@@ -44,6 +44,7 @@ The target retrieval flow is:
 ```text
 query
 -> candidate generation: title/alias exact, BM25 chunks
+-> relational arm: typed edges for relationship-shaped queries
 -> merge by slug: one page result with matched evidence
 -> graph expansion: explicit links, backlinks, and mentions around strongest pages
 -> optional future rerank top candidates
@@ -108,6 +109,8 @@ jazmem "Ink enterprise Claude deployment"
 jazmem search --limit 5 "Oxford Edge Irwin Zaid"
 jazmem search --text "physics reasoning environment"
 jazmem --agentic "what do we know about Leeroo"
+jazmem "who works at Acme"
+jazmem "what connects Alice and Widget Co"
 ```
 
 Read pages:
@@ -250,6 +253,42 @@ returns `AgenticResponse`:
 ```
 
 This is deterministic, extractive synthesis for agents. It packages evidence and citations into an answer-shaped response, but it is not yet chat-model prose like gbrain. Jaz can wrap this with its own LLM provider without changing markdown or SQLite.
+
+## Typed Relationships
+
+Typed edges are derived from explicit wikilinks inside `## Relationships` sections. They are stored only in SQLite and rebuilt by `jazmem index`.
+
+Good canonical shape:
+
+```md
+## Relationships
+
+- [[companies/acme]] - works at. [Source: User, chat, 2026-06-08]
+- [[companies/widget-co]] - invested in. [Source: User, chat, 2026-06-08]
+- [[people/riley]] - friend. [Source: User, chat, 2026-06-08]
+```
+
+Supported v1 edge types:
+
+- `works_at`
+- `works_with`
+- `founder_of`
+- `invested_in`
+- `advises`
+- `friend`
+
+Supported relational query forms include:
+
+```bash
+jazmem "who works at Acme"
+jazmem "who invested in Widget Co"
+jazmem "who founded Widget Co"
+jazmem "what companies has Alice invested in"
+jazmem "who are Alice's friends"
+jazmem "what connects Alice and Widget Co"
+```
+
+No LLM is used for this path.
 
 ## What Is Not Implemented Yet
 

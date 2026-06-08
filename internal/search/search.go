@@ -2,7 +2,10 @@ package search
 
 import (
 	"context"
+	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 
 	sqlitestore "github.com/wins/jazmem/internal/store/sqlite"
 )
@@ -22,6 +25,10 @@ type Response struct {
 
 func (s *Service) Search(ctx context.Context, query string, opts Options) (Response, error) {
 	limit := normalizeLimit(opts.Limit)
+	relationalRows, err := s.relationalSearch(ctx, query, limit)
+	if err != nil {
+		return Response{}, err
+	}
 	titleRows, err := s.Store.SearchTitleAlias(ctx, query, limit)
 	if err != nil {
 		return Response{}, err
@@ -30,7 +37,7 @@ func (s *Service) Search(ctx context.Context, query string, opts Options) (Respo
 	if err != nil {
 		return Response{}, err
 	}
-	merged := mergeRows(titleRows, bm25Rows)
+	merged := mergeRows(relationalRows, titleRows, bm25Rows)
 	seeds := topSlugs(merged, limit)
 	graphRows, err := s.Store.LinkedPages(ctx, seeds, limit)
 	if err != nil {
@@ -44,11 +51,35 @@ func (s *Service) Search(ctx context.Context, query string, opts Options) (Respo
 	return Response{Rows: merged, GraphHits: graphHits}, nil
 }
 
+func (s *Service) relationalSearch(ctx context.Context, query string, limit int) ([]sqlitestore.SearchResult, error) {
+	parsed := parseRelationalQuery(query)
+	switch parsed.Kind {
+	case "fanout":
+		seed, err := s.Store.ResolveEntity(ctx, parsed.Seed)
+		if err != nil || seed == "" {
+			return nil, err
+		}
+		return s.Store.RelationalFanout(ctx, seed, parsed.LinkTypes, parsed.Direction, limit)
+	case "between":
+		left, err := s.Store.ResolveEntity(ctx, parsed.Left)
+		if err != nil || left == "" {
+			return nil, err
+		}
+		right, err := s.Store.ResolveEntity(ctx, parsed.Right)
+		if err != nil || right == "" {
+			return nil, err
+		}
+		return s.Store.RelationalBetween(ctx, left, right, limit)
+	default:
+		return nil, nil
+	}
+}
+
 func mergeRows(groups ...[]sqlitestore.SearchResult) []sqlitestore.SearchResult {
 	byMatch := map[string]sqlitestore.SearchResult{}
 	for _, group := range groups {
 		for _, row := range group {
-			key := row.Slug + "\x00" + string(rune(row.ChunkIndex))
+			key := row.Slug + "\x00" + strconv.Itoa(row.ChunkIndex)
 			current, ok := byMatch[key]
 			if !ok || row.Score < current.Score {
 				byMatch[key] = row
@@ -122,4 +153,72 @@ func chunkCandidateLimit(pageLimit int) int {
 		limit = 50
 	}
 	return limit
+}
+
+type relationalQuery struct {
+	Kind      string
+	Seed      string
+	Left      string
+	Right     string
+	LinkTypes []string
+	Direction string
+}
+
+type relationalPattern struct {
+	RE        *regexp.Regexp
+	LinkTypes []string
+	Direction string
+}
+
+var betweenPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^\s*what\s+connects\s+(.+?)\s+and\s+(.+?)\s*\??\s*$`),
+	regexp.MustCompile(`(?i)^\s*how\s+(?:is|are)\s+(.+?)\s+connected\s+to\s+(.+?)\s*\??\s*$`),
+}
+
+var fanoutPatterns = []relationalPattern{
+	{regexp.MustCompile(`(?i)^\s*who\s+(?:has\s+)?(?:invested|invests)\s+in\s+(.+?)\s*\??\s*$`), []string{"invested_in"}, "in"},
+	{regexp.MustCompile(`(?i)^\s*who\s+(?:works|worked)\s+(?:at|for)\s+(.+?)\s*\??\s*$`), []string{"works_at"}, "in"},
+	{regexp.MustCompile(`(?i)^\s*who\s+(?:founded|started|co-founded|cofounded)\s+(.+?)\s*\??\s*$`), []string{"founder_of"}, "in"},
+	{regexp.MustCompile(`(?i)^\s*who\s+(?:advises|advised|is\s+(?:an\s+)?advisor\s+to)\s+(.+?)\s*\??\s*$`), []string{"advises"}, "in"},
+	{regexp.MustCompile(`(?i)^\s*what\s+(?:companies|projects|orgs|organizations)\s+(?:has|does|did)\s+(.+?)\s+(?:invest(?:ed)?\s+in|invests\s+in)\s*\??\s*$`), []string{"invested_in"}, "out"},
+	{regexp.MustCompile(`(?i)^\s*what\s+(?:companies|projects|orgs|organizations)\s+(?:has|does|did)\s+(.+?)\s+(?:advise|advises|advised)\s*\??\s*$`), []string{"advises"}, "out"},
+	{regexp.MustCompile(`(?i)^\s*where\s+(?:does|did)\s+(.+?)\s+(?:work|works|worked)\s*\??\s*$`), []string{"works_at"}, "out"},
+	{regexp.MustCompile(`(?i)^\s*who\s+(?:are|is)\s+(.+?)'?s\s+friends\s*\??\s*$`), []string{"friend"}, "both"},
+	{regexp.MustCompile(`(?i)^\s*who\s+(?:is|are)\s+friends\s+with\s+(.+?)\s*\??\s*$`), []string{"friend"}, "both"},
+	{regexp.MustCompile(`(?i)^\s*who\s+(?:works|worked)\s+with\s+(.+?)\s*\??\s*$`), []string{"works_with"}, "both"},
+}
+
+func parseRelationalQuery(query string) relationalQuery {
+	query = strings.TrimSpace(query)
+	for _, re := range betweenPatterns {
+		if match := re.FindStringSubmatch(query); len(match) == 3 {
+			return relationalQuery{
+				Kind:  "between",
+				Left:  cleanEntity(match[1]),
+				Right: cleanEntity(match[2]),
+			}
+		}
+	}
+	for _, pattern := range fanoutPatterns {
+		if match := pattern.RE.FindStringSubmatch(query); len(match) == 2 {
+			return relationalQuery{
+				Kind:      "fanout",
+				Seed:      cleanEntity(match[1]),
+				LinkTypes: pattern.LinkTypes,
+				Direction: pattern.Direction,
+			}
+		}
+	}
+	return relationalQuery{}
+}
+
+func cleanEntity(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.Trim(value, " \t\r\n?.!,;:\"'`")
+	for _, prefix := range []string{"the ", "a ", "an "} {
+		if strings.HasPrefix(strings.ToLower(value), prefix) && len(value) > len(prefix) {
+			return strings.TrimSpace(value[len(prefix):])
+		}
+	}
+	return value
 }

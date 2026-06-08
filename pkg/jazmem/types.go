@@ -79,6 +79,7 @@ type Report struct {
 	PageCount       int `json:"page_count"`
 	ChunkCount      int `json:"chunk_count"`
 	ExplicitLinks   int `json:"explicit_links"`
+	TypedLinks      int `json:"typed_links"`
 	MentionLinks    int `json:"mention_links"`
 	UnresolvedLinks int `json:"unresolved_links"`
 }
@@ -133,5 +134,6 @@ type DoctorReport struct {
 	PageCount       int    `json:"page_count"`
 	ChunkCount      int    `json:"chunk_count"`
 	LinkCount       int    `json:"link_count"`
+	TypedLinkCount  int    `json:"typed_link_count"`
 	UnresolvedCount int    `json:"unresolved_count"`
 }

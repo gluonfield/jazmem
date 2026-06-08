@@ -86,6 +86,7 @@ type DoctorReport struct {
 	PageCount       int `json:"page_count"`
 	ChunkCount      int `json:"chunk_count"`
 	LinkCount       int `json:"link_count"`
+	TypedLinkCount  int `json:"typed_link_count"`
 	UnresolvedCount int `json:"unresolved_count"`
 }
 
@@ -165,6 +166,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			PRIMARY KEY (from_slug, to_slug, link_type, link_source, display, context)
 		)`,
 		`CREATE INDEX IF NOT EXISTS links_to_idx ON links(to_slug)`,
+		`CREATE INDEX IF NOT EXISTS links_type_idx ON links(link_type, from_slug, to_slug)`,
 		`CREATE TABLE IF NOT EXISTS unresolved_links (
 			from_slug TEXT NOT NULL,
 			target TEXT NOT NULL,
@@ -252,12 +254,7 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	if query == "" {
 		return nil, nil
 	}
-	if limit <= 0 {
-		limit = 10
-	}
-	if limit > 50 {
-		limit = 50
-	}
+	limit = normalizeLimit(limit)
 	tokens := ftsTokens(query)
 	if match := ftsQueryAll(tokens); match != "" {
 		results, err := s.searchFTS(ctx, match, limit)
@@ -358,20 +355,188 @@ func (s *Store) LinkedPages(ctx context.Context, seeds []string, limit int) ([]S
 	return scanSearchRows(rows)
 }
 
-func (s *Store) searchFTS(ctx context.Context, match string, limit int) ([]SearchResult, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT f.slug, f.chunk_index, p.title,
-		snippet(chunks_fts, 3, '[', ']', '...', 16) AS snippet,
-		bm25(chunks_fts) AS rank
-		FROM chunks_fts f
-		JOIN pages p ON p.slug = f.slug
-		WHERE chunks_fts MATCH ?
-		ORDER BY rank
-		LIMIT ?`, match, limit)
+func (s *Store) ResolveEntity(ctx context.Context, text string) (string, error) {
+	text = cleanEntityPhrase(text)
+	if text == "" {
+		return "", nil
+	}
+	slug := cleanSlug(text)
+	if slug != "" {
+		var found string
+		err := s.db.QueryRowContext(ctx, `SELECT slug FROM pages WHERE slug = ?`, slug).Scan(&found)
+		if err == nil {
+			return found, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+	}
+	normalized := normalizeEntity(text)
+	rows, err := s.db.QueryContext(ctx, `SELECT slug FROM (
+			SELECT slug FROM aliases WHERE normalized_alias = ?
+			UNION
+			SELECT slug FROM pages WHERE lower(title) = ?
+		)
+		ORDER BY slug
+		LIMIT 2`, normalized, normalized)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var matches []string
+	for rows.Next() {
+		var match string
+		if err := rows.Scan(&match); err != nil {
+			return "", err
+		}
+		matches = append(matches, match)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if len(matches) != 1 {
+		return "", nil
+	}
+	return matches[0], nil
+}
+
+func (s *Store) RelationalFanout(ctx context.Context, seed string, linkTypes []string, direction string, limit int) ([]SearchResult, error) {
+	seed = strings.TrimSpace(seed)
+	linkTypes = uniqueNonEmpty(linkTypes)
+	if seed == "" || len(linkTypes) == 0 {
+		return nil, nil
+	}
+	limit = normalizeLimit(limit)
+	typeWhere, args := linkTypeWhere(linkTypes)
+	var edgeSQL string
+	switch direction {
+	case "out":
+		args = append(args, seed)
+		edgeSQL = `SELECT to_slug AS slug, link_type, context, -20.0 AS score
+			FROM links
+			WHERE link_source = 'relationship' AND ` + typeWhere + ` AND from_slug = ?`
+	case "both":
+		args = append(args, seed)
+		args = append(args, stringSliceToAny(linkTypes)...)
+		args = append(args, seed)
+		edgeSQL = `SELECT to_slug AS slug, link_type, context, -20.0 AS score
+			FROM links
+			WHERE link_source = 'relationship' AND ` + typeWhere + ` AND from_slug = ?
+			UNION ALL
+			SELECT from_slug AS slug, link_type, context, -20.0 AS score
+			FROM links
+			WHERE link_source = 'relationship' AND ` + typeWhere + ` AND to_slug = ?`
+	default:
+		args = append(args, seed)
+		edgeSQL = `SELECT from_slug AS slug, link_type, context, -20.0 AS score
+			FROM links
+			WHERE link_source = 'relationship' AND ` + typeWhere + ` AND to_slug = ?`
+	}
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, `WITH edges AS (`+edgeSQL+`),
+		ranked AS (
+			SELECT slug, MIN(score) AS score, MIN(link_type) AS link_type, MIN(context) AS context
+			FROM edges
+			WHERE slug <> ''
+			GROUP BY slug
+			ORDER BY score, slug
+			LIMIT ?
+		)
+		SELECT r.slug, COALESCE(c.chunk_index, 0), p.title,
+			CASE
+				WHEN r.context <> '' THEN '[' || r.link_type || '] ' || r.context
+				ELSE COALESCE(substr(c.body, 1, 600), p.title)
+			END AS snippet,
+			r.score
+		FROM ranked r
+		JOIN pages p ON p.slug = r.slug
+		LEFT JOIN chunks c ON c.slug = r.slug AND c.chunk_index = 0
+		ORDER BY r.score, p.title`, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	return scanSearchRows(rows)
+}
+
+func (s *Store) RelationalBetween(ctx context.Context, left, right string, limit int) ([]SearchResult, error) {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "" || right == "" || left == right {
+		return nil, nil
+	}
+	limit = normalizeLimit(limit)
+	rows, err := s.db.QueryContext(ctx, `WITH undirected AS (
+			SELECT from_slug AS a, to_slug AS b, link_type, context
+			FROM links
+			WHERE link_source = 'relationship'
+			UNION ALL
+			SELECT to_slug AS a, from_slug AS b, link_type, context
+			FROM links
+			WHERE link_source = 'relationship'
+		),
+		candidates AS (
+			SELECT ? AS slug, -20.0 AS score, link_type, context
+			FROM undirected
+			WHERE a = ? AND b = ?
+			UNION ALL
+			SELECT ? AS slug, -20.0 AS score, link_type, context
+			FROM undirected
+			WHERE a = ? AND b = ?
+			UNION ALL
+			SELECT u1.b AS slug, -19.0 AS score, u1.link_type || '+' || u2.link_type AS link_type,
+				COALESCE(NULLIF(u1.context, ''), '') || CASE WHEN u1.context <> '' AND u2.context <> '' THEN ' / ' ELSE '' END || COALESCE(NULLIF(u2.context, ''), '') AS context
+			FROM undirected u1
+			JOIN undirected u2 ON u2.b = u1.b
+			WHERE u1.a = ? AND u2.a = ? AND u1.b NOT IN (?, ?)
+		),
+		ranked AS (
+			SELECT slug, MIN(score) AS score, MIN(link_type) AS link_type, MIN(context) AS context
+			FROM candidates
+			WHERE slug <> ''
+			GROUP BY slug
+			ORDER BY score, slug
+			LIMIT ?
+		)
+		SELECT r.slug, COALESCE(c.chunk_index, 0), p.title,
+			CASE
+				WHEN r.context <> '' THEN '[' || r.link_type || '] ' || r.context
+				ELSE COALESCE(substr(c.body, 1, 600), p.title)
+			END AS snippet,
+			r.score
+		FROM ranked r
+		JOIN pages p ON p.slug = r.slug
+		LEFT JOIN chunks c ON c.slug = r.slug AND c.chunk_index = 0
+		ORDER BY r.score, p.title`,
+		left, left, right,
+		right, right, left,
+		left, right, left, right,
+		limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanSearchRows(rows)
+}
+
+func (s *Store) searchFTS(ctx context.Context, match string, limit int) ([]SearchResult, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT f.slug, f.chunk_index, p.title,
+		substr(f.body, 1, 240) AS snippet,
+		bm25(chunks_fts) AS rank
+		FROM chunks_fts f
+		JOIN pages p ON p.slug = f.slug
+		WHERE chunks_fts MATCH ?
+		ORDER BY rank
+		LIMIT ?`, match, chunkPoolLimit(limit))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	results, err := scanSearchRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	return bestPerPage(results, limit), nil
 }
 
 func (s *Store) searchTitleAliasTerm(ctx context.Context, term string, limit int) ([]SearchResult, error) {
@@ -423,17 +588,21 @@ func (s *Store) searchLike(ctx context.Context, query string, limit int) ([]Sear
 	like := "%" + query + "%"
 	rows, err := s.db.QueryContext(ctx, `SELECT c.slug, c.chunk_index, p.title,
 		substr(c.body, 1, 240) AS snippet,
-		0.0 AS rank
+		CASE WHEN p.title LIKE ? THEN -0.5 ELSE 0.0 END AS rank
 		FROM chunks c
 		JOIN pages p ON p.slug = c.slug
 		WHERE p.title LIKE ? OR c.body LIKE ?
-		ORDER BY p.title, c.chunk_index
-		LIMIT ?`, like, like, limit)
+		ORDER BY rank, p.title, c.chunk_index
+		LIMIT ?`, like, like, like, chunkPoolLimit(limit))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	return scanSearchRows(rows)
+	results, err := scanSearchRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	return bestPerPage(results, limit), nil
 }
 
 func (s *Store) Doctor(ctx context.Context) (DoctorReport, error) {
@@ -445,6 +614,7 @@ func (s *Store) Doctor(ctx context.Context) (DoctorReport, error) {
 		{`SELECT COUNT(*) FROM pages`, &report.PageCount},
 		{`SELECT COUNT(*) FROM chunks`, &report.ChunkCount},
 		{`SELECT COUNT(*) FROM links`, &report.LinkCount},
+		{`SELECT COUNT(*) FROM links WHERE link_source = 'relationship'`, &report.TypedLinkCount},
 		{`SELECT COUNT(*) FROM unresolved_links`, &report.UnresolvedCount},
 	}
 	for _, count := range counts {
@@ -624,6 +794,17 @@ func normalizeLimit(limit int) int {
 	return limit
 }
 
+func chunkPoolLimit(pageLimit int) int {
+	limit := normalizeLimit(pageLimit) * 8
+	if limit < 50 {
+		return 50
+	}
+	if limit > 500 {
+		return 500
+	}
+	return limit
+}
+
 func ftsTokens(query string) []string {
 	tokens := ftsToken.FindAllString(query, -1)
 	if len(tokens) > 8 {
@@ -664,6 +845,36 @@ func lookupTerms(query string) []string {
 
 func normalizeLookup(s string) string {
 	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(s))), " ")
+}
+
+func normalizeEntity(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.Trim(s, " \t\r\n?.!,;:\"'`")
+	s = strings.ReplaceAll(s, "_", " ")
+	s = strings.ReplaceAll(s, "-", " ")
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func cleanEntityPhrase(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.Trim(s, " \t\r\n?.!,;:\"'`")
+	for _, prefix := range []string{"the ", "a ", "an "} {
+		if strings.HasPrefix(strings.ToLower(s), prefix) && len(s) > len(prefix) {
+			return strings.TrimSpace(s[len(prefix):])
+		}
+	}
+	return s
+}
+
+func cleanSlug(s string) string {
+	s = filepath.ToSlash(strings.TrimSpace(s))
+	s = strings.TrimSuffix(s, ".md")
+	s = strings.Trim(s, " \t\r\n?.!,;:\"'`")
+	s = strings.Trim(s, "/")
+	if strings.Contains(s, "..") {
+		return ""
+	}
+	return strings.ToLower(s)
 }
 
 func ftsQueryAll(tokens []string) string {
@@ -719,4 +930,45 @@ func sortSearchResults(results []SearchResult) {
 		}
 		return results[a].Score < results[b].Score
 	})
+}
+
+func bestPerPage(rows []SearchResult, limit int) []SearchResult {
+	limit = normalizeLimit(limit)
+	bySlug := map[string]SearchResult{}
+	for _, row := range rows {
+		current, ok := bySlug[row.Slug]
+		if !ok || row.Score < current.Score || (row.Score == current.Score && row.ChunkIndex < current.ChunkIndex) {
+			bySlug[row.Slug] = row
+		}
+	}
+	results := make([]SearchResult, 0, len(bySlug))
+	for _, row := range bySlug {
+		results = append(results, row)
+	}
+	sortSearchResults(results)
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results
+}
+
+func linkTypeWhere(linkTypes []string) (string, []any) {
+	if len(linkTypes) == 1 {
+		return "link_type = ?", []any{linkTypes[0]}
+	}
+	parts := make([]string, 0, len(linkTypes))
+	args := make([]any, 0, len(linkTypes))
+	for _, linkType := range linkTypes {
+		parts = append(parts, "?")
+		args = append(args, linkType)
+	}
+	return "link_type IN (" + strings.Join(parts, ",") + ")", args
+}
+
+func stringSliceToAny(values []string) []any {
+	args := make([]any, 0, len(values))
+	for _, value := range values {
+		args = append(args, value)
+	}
+	return args
 }

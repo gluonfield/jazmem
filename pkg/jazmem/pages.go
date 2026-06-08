@@ -29,6 +29,7 @@ func (m *Memory) Reindex(ctx context.Context, _ ReindexOptions) (Report, error) 
 		PageCount:       report.PageCount,
 		ChunkCount:      report.ChunkCount,
 		ExplicitLinks:   report.ExplicitLinks,
+		TypedLinks:      report.TypedLinks,
 		MentionLinks:    report.MentionLinks,
 		UnresolvedLinks: report.UnresolvedLinks,
 	}, nil
@@ -85,6 +86,7 @@ func (m *Memory) Doctor(ctx context.Context) (DoctorReport, error) {
 		PageCount:       report.PageCount,
 		ChunkCount:      report.ChunkCount,
 		LinkCount:       report.LinkCount,
+		TypedLinkCount:  report.TypedLinkCount,
 		UnresolvedCount: report.UnresolvedCount,
 	}, nil
 }

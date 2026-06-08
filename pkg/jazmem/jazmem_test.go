@@ -3,6 +3,7 @@ package jazmem
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -151,6 +152,115 @@ func TestSearchExpandsExplicitMemlinks(t *testing.T) {
 	}
 	if response.Stats.GraphHits < 1 {
 		t.Fatalf("expected graph hits, got %#v", response.Stats)
+	}
+}
+
+func TestTypedRelationshipsDriveRelationalSearch(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	mem, err := Open(Config{Root: root, DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mem.Close()
+
+	write := func(slug, content string) {
+		t.Helper()
+		if err := mem.fs.WritePage(slug, content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("people/alice-example", "---\ntitle: Alice Example\naliases: [Alice]\n---\n\n# Alice Example\n\n## Relationships\n\n- [[companies/widget-co]] - invested in. [Source: User, chat, 2026-06-08]\n- [[companies/acme]] - works at. [Source: User, chat, 2026-06-08]\n- [[people/riley-example]] - friend. [Source: User, chat, 2026-06-08]\n")
+	write("people/riley-example", "---\ntitle: Riley Example\naliases: [Riley]\n---\n\n# Riley Example\n")
+	write("companies/widget-co", "---\ntitle: Widget Co\naliases: [Widget]\n---\n\n# Widget Co\n\nWidget Co is a company.\n")
+	write("companies/acme", "---\ntitle: Acme\n---\n\n# Acme\n\nAcme is a company.\n")
+
+	report, err := mem.Reindex(context.Background(), ReindexOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.TypedLinks < 3 {
+		t.Fatalf("typed links = %d, want at least 3", report.TypedLinks)
+	}
+	doctor, err := mem.Doctor(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doctor.TypedLinkCount < 3 {
+		t.Fatalf("typed link count = %d, want at least 3", doctor.TypedLinkCount)
+	}
+
+	investors, err := mem.Search(context.Background(), "who invested in Widget Co", SearchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(investors) == 0 || investors[0].Slug != "people/alice-example" {
+		t.Fatalf("investor query returned %#v", investors)
+	}
+
+	workers, err := mem.Search(context.Background(), "who works at Acme", SearchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workers) == 0 || workers[0].Slug != "people/alice-example" {
+		t.Fatalf("works-at query returned %#v", workers)
+	}
+
+	friends, err := mem.Search(context.Background(), "who are Alice's friends", SearchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(friends) == 0 || friends[0].Slug != "people/riley-example" {
+		t.Fatalf("friend query returned %#v", friends)
+	}
+
+	connection, err := mem.Search(context.Background(), "what connects Alice and Widget Co", SearchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectionSlugs := map[string]bool{}
+	for _, result := range connection {
+		connectionSlugs[result.Slug] = true
+	}
+	if !connectionSlugs["people/alice-example"] || !connectionSlugs["companies/widget-co"] {
+		t.Fatalf("connection query returned %#v", connection)
+	}
+}
+
+func TestSearchMaxPoolsChunksBeforePageLimit(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	mem, err := Open(Config{Root: root, DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mem.Close()
+
+	var noisy strings.Builder
+	noisy.WriteString("---\ntitle: Noisy Needle\n---\n\n# Noisy Needle\n\n")
+	for i := 0; i < 20; i++ {
+		fmt.Fprintf(&noisy, "needle appears in noisy chunk %02d.\n\n", i)
+	}
+	if err := mem.fs.WritePage("projects/noisy-needle", noisy.String()); err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.fs.WritePage("projects/target-needle", "---\ntitle: Target Needle\n---\n\n# Target Needle\n\nneedle appears once in the target page.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.Reindex(context.Background(), ReindexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := mem.Retrieve(context.Background(), "needle", SearchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slugs := map[string]bool{}
+	for _, result := range response.Results {
+		slugs[result.Slug] = true
+	}
+	if !slugs["projects/noisy-needle"] || !slugs["projects/target-needle"] {
+		t.Fatalf("expected distinct pages after max-pool, got %#v", response.Results)
 	}
 }
 
