@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -279,6 +280,84 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	return s.searchLike(ctx, query, limit)
 }
 
+func (s *Store) SearchTitleAlias(ctx context.Context, query string, limit int) ([]SearchResult, error) {
+	terms := lookupTerms(query)
+	if len(terms) == 0 {
+		return nil, nil
+	}
+	limit = normalizeLimit(limit)
+	bySlug := map[string]SearchResult{}
+	for _, term := range terms {
+		rows, err := s.searchTitleAliasTerm(ctx, term, limit)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			current, ok := bySlug[row.Slug]
+			if !ok || row.Score < current.Score {
+				bySlug[row.Slug] = row
+			}
+		}
+	}
+	results := make([]SearchResult, 0, len(bySlug))
+	for _, row := range bySlug {
+		results = append(results, row)
+	}
+	sortSearchResults(results)
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
+}
+
+func (s *Store) LinkedPages(ctx context.Context, seeds []string, limit int) ([]SearchResult, error) {
+	seeds = uniqueNonEmpty(seeds)
+	if len(seeds) == 0 {
+		return nil, nil
+	}
+	limit = normalizeLimit(limit)
+	values := make([]string, 0, len(seeds))
+	args := make([]any, 0, len(seeds)+1)
+	for _, seed := range seeds {
+		values = append(values, "(?)")
+		args = append(args, seed)
+	}
+	args = append(args, limit)
+	query := fmt.Sprintf(`WITH seed(slug) AS (VALUES %s),
+		edges AS (
+			SELECT l.to_slug AS slug,
+				CASE WHEN l.link_source = 'explicit' THEN 0.80 ELSE 1.20 END AS score
+			FROM links l
+			JOIN seed ON seed.slug = l.from_slug
+			UNION ALL
+			SELECT l.from_slug AS slug,
+				CASE WHEN l.link_source = 'explicit' THEN 0.90 ELSE 1.30 END AS score
+			FROM links l
+			JOIN seed ON seed.slug = l.to_slug
+		),
+		ranked AS (
+			SELECT slug, MIN(score) AS score
+			FROM edges
+			WHERE slug NOT IN (SELECT slug FROM seed)
+			GROUP BY slug
+			ORDER BY score
+			LIMIT ?
+		)
+		SELECT r.slug, COALESCE(c.chunk_index, 0), p.title,
+			COALESCE(substr(c.body, 1, 600), p.title) AS snippet,
+			r.score
+		FROM ranked r
+		JOIN pages p ON p.slug = r.slug
+		LEFT JOIN chunks c ON c.slug = r.slug AND c.chunk_index = 0
+		ORDER BY r.score, p.title`, strings.Join(values, ","))
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanSearchRows(rows)
+}
+
 func (s *Store) searchFTS(ctx context.Context, match string, limit int) ([]SearchResult, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT f.slug, f.chunk_index, p.title,
 		snippet(chunks_fts, 3, '[', ']', '...', 16) AS snippet,
@@ -288,6 +367,51 @@ func (s *Store) searchFTS(ctx context.Context, match string, limit int) ([]Searc
 		WHERE chunks_fts MATCH ?
 		ORDER BY rank
 		LIMIT ?`, match, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanSearchRows(rows)
+}
+
+func (s *Store) searchTitleAliasTerm(ctx context.Context, term string, limit int) ([]SearchResult, error) {
+	like := "%" + term + "%"
+	rows, err := s.db.QueryContext(ctx, `WITH candidates AS (
+			SELECT p.slug,
+				CASE
+					WHEN lower(p.title) = ? THEN -4.00
+					WHEN lower(p.title) LIKE ? THEN -3.00
+					ELSE 10.00
+				END AS score
+			FROM pages p
+			WHERE lower(p.title) = ? OR lower(p.title) LIKE ?
+			UNION ALL
+			SELECT a.slug,
+				CASE
+					WHEN a.normalized_alias = ? THEN -4.20
+					WHEN a.normalized_alias LIKE ? THEN -3.20
+					ELSE 10.00
+				END AS score
+			FROM aliases a
+			WHERE a.normalized_alias = ? OR a.normalized_alias LIKE ?
+		),
+		ranked AS (
+			SELECT slug, MIN(score) AS score
+			FROM candidates
+			GROUP BY slug
+			ORDER BY score
+			LIMIT ?
+		)
+		SELECT r.slug, COALESCE(c.chunk_index, 0), p.title,
+			COALESCE(substr(c.body, 1, 600), p.title) AS snippet,
+			r.score
+		FROM ranked r
+		JOIN pages p ON p.slug = r.slug
+		LEFT JOIN chunks c ON c.slug = r.slug AND c.chunk_index = 0
+		ORDER BY r.score, p.title`,
+		term, like, term, like,
+		term, like, term, like,
+		limit)
 	if err != nil {
 		return nil, err
 	}
@@ -469,12 +593,77 @@ func millis(t time.Time) int64 {
 
 var ftsToken = regexp.MustCompile(`[A-Za-z0-9_]+`)
 
+var searchStopwords = map[string]bool{
+	"about": true,
+	"and":   true,
+	"are":   true,
+	"for":   true,
+	"how":   true,
+	"the":   true,
+	"what":  true,
+	"where": true,
+	"which": true,
+	"who":   true,
+	"why":   true,
+	"with":  true,
+	"from":  true,
+	"into":  true,
+	"is":    true,
+	"me":    true,
+	"my":    true,
+	"tell":  true,
+}
+
+func normalizeLimit(limit int) int {
+	if limit <= 0 {
+		return 10
+	}
+	if limit > 50 {
+		return 50
+	}
+	return limit
+}
+
 func ftsTokens(query string) []string {
 	tokens := ftsToken.FindAllString(query, -1)
 	if len(tokens) > 8 {
 		tokens = tokens[:8]
 	}
 	return tokens
+}
+
+func lookupTerms(query string) []string {
+	full := normalizeLookup(query)
+	tokens := ftsTokens(query)
+	seen := map[string]bool{}
+	var terms []string
+	add := func(term string) {
+		term = normalizeLookup(term)
+		if term == "" || seen[term] {
+			return
+		}
+		seen[term] = true
+		terms = append(terms, term)
+	}
+	add(full)
+	for _, token := range tokens {
+		term := normalizeLookup(token)
+		if searchStopwords[term] {
+			continue
+		}
+		if len(term) < 2 && len(tokens) > 1 {
+			continue
+		}
+		add(term)
+	}
+	if len(terms) > 8 {
+		terms = terms[:8]
+	}
+	return terms
+}
+
+func normalizeLookup(s string) string {
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(s))), " ")
 }
 
 func ftsQueryAll(tokens []string) string {
@@ -507,4 +696,27 @@ func isFTSQuerySyntaxError(err error) bool {
 	text := strings.ToLower(err.Error())
 	return strings.Contains(text, "fts5") &&
 		(strings.Contains(text, "syntax") || strings.Contains(text, "malformed") || strings.Contains(text, "unterminated"))
+}
+
+func uniqueNonEmpty(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func sortSearchResults(results []SearchResult) {
+	sort.Slice(results, func(a, b int) bool {
+		if results[a].Score == results[b].Score {
+			return results[a].Slug < results[b].Slug
+		}
+		return results[a].Score < results[b].Score
+	})
 }

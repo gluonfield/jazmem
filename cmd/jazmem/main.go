@@ -113,7 +113,7 @@ func runIndex(args []string) error {
 }
 
 func runSearch(args []string) error {
-	cfg, query, limit, text, err := parseSearchArgs(args)
+	cfg, query, limit, text, agentic, err := parseSearchArgs(args)
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
 	}
@@ -128,6 +128,17 @@ func runSearch(args []string) error {
 		return err
 	}
 	defer m.Close()
+	if agentic {
+		result, err := m.AgenticSearch(context.Background(), query, jazmem.AgenticOptions{Limit: limit})
+		if err != nil {
+			return err
+		}
+		if text {
+			fmt.Print(jazmem.RenderAgenticText(result))
+			return nil
+		}
+		return printJSON(result)
+	}
 	result, err := m.Retrieve(context.Background(), query, jazmem.SearchOptions{Limit: limit})
 	if err != nil {
 		return err
@@ -139,10 +150,11 @@ func runSearch(args []string) error {
 	return printJSON(result)
 }
 
-func parseSearchArgs(args []string) (jazmem.Config, string, int, bool, error) {
+func parseSearchArgs(args []string) (jazmem.Config, string, int, bool, bool, error) {
 	var root, path, db string
 	limit := 10
 	text := false
+	agentic := false
 	var query []string
 	for i := 0; i < len(args); i++ {
 		arg := strings.TrimSpace(args[i])
@@ -154,23 +166,25 @@ func parseSearchArgs(args []string) (jazmem.Config, string, int, bool, error) {
 			i = len(args)
 		case arg == "-text" || arg == "--text":
 			text = true
+		case arg == "-agentic" || arg == "--agentic":
+			agentic = true
 		case arg == "-h" || arg == "--help":
 			usage(os.Stdout)
-			return jazmem.Config{}, "", 0, text, flag.ErrHelp
+			return jazmem.Config{}, "", 0, text, agentic, flag.ErrHelp
 		case strings.HasPrefix(arg, "-limit=") || strings.HasPrefix(arg, "--limit="):
 			value := strings.TrimPrefix(strings.TrimPrefix(arg, "--limit="), "-limit=")
 			parsed, err := parseLimit(value)
 			if err != nil {
-				return jazmem.Config{}, "", 0, false, err
+				return jazmem.Config{}, "", 0, false, false, err
 			}
 			limit = parsed
 		case arg == "-limit" || arg == "--limit":
 			if i+1 >= len(args) {
-				return jazmem.Config{}, "", 0, false, errors.New("limit value is required")
+				return jazmem.Config{}, "", 0, false, false, errors.New("limit value is required")
 			}
 			parsed, err := parseLimit(args[i+1])
 			if err != nil {
-				return jazmem.Config{}, "", 0, false, err
+				return jazmem.Config{}, "", 0, false, false, err
 			}
 			limit = parsed
 			i++
@@ -178,7 +192,7 @@ func parseSearchArgs(args []string) (jazmem.Config, string, int, bool, error) {
 			root = strings.TrimPrefix(strings.TrimPrefix(arg, "--root="), "-root=")
 		case arg == "-root" || arg == "--root":
 			if i+1 >= len(args) {
-				return jazmem.Config{}, "", 0, false, errors.New("root value is required")
+				return jazmem.Config{}, "", 0, false, false, errors.New("root value is required")
 			}
 			root = args[i+1]
 			i++
@@ -186,7 +200,7 @@ func parseSearchArgs(args []string) (jazmem.Config, string, int, bool, error) {
 			path = strings.TrimPrefix(strings.TrimPrefix(arg, "--path="), "-path=")
 		case arg == "-path" || arg == "--path":
 			if i+1 >= len(args) {
-				return jazmem.Config{}, "", 0, false, errors.New("path value is required")
+				return jazmem.Config{}, "", 0, false, false, errors.New("path value is required")
 			}
 			path = args[i+1]
 			i++
@@ -194,7 +208,7 @@ func parseSearchArgs(args []string) (jazmem.Config, string, int, bool, error) {
 			db = strings.TrimPrefix(strings.TrimPrefix(arg, "--db="), "-db=")
 		case arg == "-db" || arg == "--db":
 			if i+1 >= len(args) {
-				return jazmem.Config{}, "", 0, false, errors.New("db value is required")
+				return jazmem.Config{}, "", 0, false, false, errors.New("db value is required")
 			}
 			db = args[i+1]
 			i++
@@ -204,9 +218,9 @@ func parseSearchArgs(args []string) (jazmem.Config, string, int, bool, error) {
 	}
 	selectedRoot, err := resolveRootArg(root, path, nil)
 	if err != nil {
-		return jazmem.Config{}, "", 0, false, err
+		return jazmem.Config{}, "", 0, false, false, err
 	}
-	return jazmem.Config{Root: selectedRoot, DBPath: db}, strings.TrimSpace(strings.Join(query, " ")), limit, text, nil
+	return jazmem.Config{Root: selectedRoot, DBPath: db}, strings.TrimSpace(strings.Join(query, " ")), limit, text, agentic, nil
 }
 
 func parseLimit(value string) (int, error) {
@@ -371,6 +385,7 @@ func printJSON(v any) error {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: jazmem [--root path] [--db path] <query>")
+	fmt.Fprintln(w, "       jazmem [--agentic] [--text] [--limit n] <query>")
 	fmt.Fprintln(w, "       jazmem init [--root path|--path path|path] [--db path]")
 	fmt.Fprintln(w, "       jazmem <index|search|get|page|file|checkpoint|dream|link-hygiene|doctor> [--root path] [--db path]")
 }

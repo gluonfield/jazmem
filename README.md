@@ -15,18 +15,20 @@ It has the right substrate for a smaller, cleaner version:
 - SQLite FTS5/BM25 search through `modernc.org/sqlite`
 - wikilink and mention extraction
 - compact search responses with page results, matched chunks, and stats
+- title/alias candidate generation and one-hop memlink/backlink expansion
 - simple scheduler/dream/link-hygiene scaffolding
 
 The gbrain features most likely to matter for retrieval quality are:
 
-1. Page-level candidate merging: merge chunk, alias, title, explicit-link, mention, and future vector/rerank evidence by slug before returning results.
-2. Memlink graph expansion: explicit links and backlinks should expand the candidate set around initial BM25/title/alias hits.
-3. Reranking: a cross-encoder or strong LLM reranker is the biggest likely precision lift after candidate generation.
-4. Evaluation: a fixed personal benchmark is needed before adding embeddings or tuning boosts.
-5. Incremental indexing: required once the corpus grows, but not the main quality driver.
-6. Dream consolidation: useful only if it edits canonical pages conservatively with citations and review queues.
+1. Entity candidate generation: exact title/alias hits are high signal for personal-memory queries.
+2. BM25 chunk retrieval: still the cheapest broad recall path.
+3. Memlink graph expansion: explicit links, backlinks, and mention links should expand around the strongest pages.
+4. Reranking: useful only after an eval shows candidate order is the limiting problem.
+5. Evaluation: a fixed personal benchmark is needed before adding embeddings or tuning boosts.
+6. Incremental indexing: required once the corpus grows, but not the main quality driver.
+7. Dream consolidation: useful only if it edits canonical pages conservatively with citations and review queues.
 
-Current jazmem retrieval is BM25-only over chunks, with strict-then-broad token matching. It does not use embeddings and does not use a reranker.
+Current jazmem retrieval uses title/alias matching, BM25 chunks, page-level merging, and one-hop memlink/backlink expansion. It does not use embeddings, a reranker, or a chat-model synthesizer.
 
 Do not copy gbrain wholesale. These are not v1 performance requirements for jazmem:
 
@@ -41,11 +43,11 @@ The target retrieval flow is:
 
 ```text
 query
--> candidate generation: title/alias exact, BM25 chunks, explicit links, mentions, optional vectors
+-> candidate generation: title/alias exact, BM25 chunks
 -> merge by slug: one page result with matched evidence
--> graph expansion: backlinks/neighbors around strongest pages
--> rerank top candidates
--> return compact page results
+-> graph expansion: explicit links, backlinks, and mentions around strongest pages
+-> optional future rerank top candidates
+-> return compact raw results or extractive agentic answer
 ```
 
 ## Install
@@ -105,6 +107,7 @@ Search:
 jazmem "Ink enterprise Claude deployment"
 jazmem search --limit 5 "Oxford Edge Irwin Zaid"
 jazmem search --text "physics reasoning environment"
+jazmem --agentic "what do we know about Leeroo"
 ```
 
 Read pages:
@@ -155,6 +158,7 @@ Endpoints:
 curl 'http://127.0.0.1:8765/health'
 curl 'http://127.0.0.1:8765/doctor'
 curl 'http://127.0.0.1:8765/search?q=Ink%20enterprise&limit=5'
+curl 'http://127.0.0.1:8765/search?q=Ink%20enterprise&agentic=1'
 curl 'http://127.0.0.1:8765/file/projects/ink'
 curl 'http://127.0.0.1:8765/file/projects/ink?raw=1'
 curl -X POST 'http://127.0.0.1:8765/reindex'
@@ -196,8 +200,6 @@ Useful locations:
 
 ```json
 {
-  "query": "Ink enterprise Claude deployment",
-  "limit": 5,
   "results": [
     {
       "slug": "concepts/ink-enterprise-deployment-strategy",
@@ -219,7 +221,35 @@ Useful locations:
 }
 ```
 
-This is ranked page retrieval with matched chunk evidence, not answer synthesis. No chat model is called.
+This is raw ranked retrieval with matched chunk evidence. No chat model is called.
+
+Agentic search:
+
+```bash
+jazmem --agentic "what do we know about Leeroo"
+curl 'http://127.0.0.1:8765/search?q=Leeroo&agentic=1'
+```
+
+returns `AgenticResponse`:
+
+```json
+{
+  "answer": "Most relevant memory:\n\nLeeroo (companies/leeroo):\n- Leeroo is connected to [[projects/ink]]... [Source: [[companies/leeroo]], chunk 0]",
+  "citations": [
+    {
+      "slug": "companies/leeroo",
+      "title": "Leeroo",
+      "chunk": 0
+    }
+  ],
+  "stats": {
+    "pages": 1,
+    "chunks": 1
+  }
+}
+```
+
+This is deterministic, extractive synthesis for agents. It packages evidence and citations into an answer-shaped response, but it is not yet chat-model prose like gbrain. Jaz can wrap this with its own LLM provider without changing markdown or SQLite.
 
 ## What Is Not Implemented Yet
 
@@ -227,9 +257,9 @@ This is ranked page retrieval with matched chunk evidence, not answer synthesis.
 - Embeddings
 - Vector search
 - Reranker
-- Graph-expanded search
+- Fixed personal eval set
 - Durable dream workflow
 - Full ingestion connectors
-- Answer synthesis with gap analysis
+- LLM answer synthesis and richer gap analysis
 
 These should be added behind the existing package/CLI surfaces without changing markdown as the source of truth.

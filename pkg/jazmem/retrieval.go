@@ -10,38 +10,48 @@ import (
 )
 
 func (m *Memory) Search(ctx context.Context, query string, opts SearchOptions) ([]Result, error) {
-	limit := normalizeSearchLimit(opts.Limit)
-	rows, err := m.search.Search(ctx, query, search.Options{Limit: chunkCandidateLimit(limit)})
+	response, err := m.retrieve(ctx, query, opts.Limit)
 	if err != nil {
 		return nil, err
 	}
-	return mergeChunkResults(rows, limit), nil
+	return response.Results, nil
 }
 
 func (m *Memory) Retrieve(ctx context.Context, query string, opts SearchOptions) (SearchResponse, error) {
-	results, err := m.Search(ctx, query, opts)
+	return m.retrieve(ctx, query, opts.Limit)
+}
+
+func (m *Memory) AgenticSearch(ctx context.Context, query string, opts AgenticOptions) (AgenticResponse, error) {
+	response, err := m.retrieve(ctx, query, opts.Limit)
+	if err != nil {
+		return AgenticResponse{}, err
+	}
+	return buildAgenticResponse(response), nil
+}
+
+func (m *Memory) retrieve(ctx context.Context, query string, rawLimit int) (SearchResponse, error) {
+	limit := normalizeSearchLimit(rawLimit)
+	candidates, err := m.search.Search(ctx, query, search.Options{Limit: limit})
 	if err != nil {
 		return SearchResponse{}, err
 	}
+	results := mergeChunkResults(candidates.Rows, limit)
 	chunks := 0
 	for _, result := range results {
 		chunks += len(result.Matches)
 	}
-	limit := normalizeSearchLimit(opts.Limit)
 	return SearchResponse{
-		Query:   strings.TrimSpace(query),
-		Limit:   limit,
 		Results: results,
 		Stats: SearchStats{
-			Pages:  len(results),
-			Chunks: chunks,
+			Pages:     len(results),
+			Chunks:    chunks,
+			GraphHits: candidates.GraphHits,
 		},
 	}, nil
 }
 
 func RenderSearchText(response SearchResponse) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Query: %s\n", response.Query)
 	fmt.Fprintf(&b, "Results: %d pages, %d matched chunks\n\n", response.Stats.Pages, response.Stats.Chunks)
 	if len(response.Results) == 0 {
 		b.WriteString("No matching memory chunks were found.\n")
@@ -56,6 +66,21 @@ func RenderSearchText(response SearchResponse) string {
 			fmt.Fprintf(&b, "  chunk %d: %s\n", match.Chunk, strings.TrimSpace(match.Snippet))
 		}
 		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func RenderAgenticText(response AgenticResponse) string {
+	var b strings.Builder
+	b.WriteString(response.Answer)
+	if !strings.HasSuffix(response.Answer, "\n") {
+		b.WriteString("\n")
+	}
+	if len(response.Gaps) > 0 {
+		b.WriteString("\nGaps:\n")
+		for _, gap := range response.Gaps {
+			fmt.Fprintf(&b, "- %s\n", gap)
+		}
 	}
 	return b.String()
 }
@@ -90,23 +115,111 @@ func mergeChunkResults(rows []sqlitestore.SearchResult, limit int) []Result {
 	return results
 }
 
+func buildAgenticResponse(response SearchResponse) AgenticResponse {
+	answer, citations := synthesizeExtractiveAnswer(response.Results)
+	gaps := []string(nil)
+	if len(response.Results) == 0 {
+		gaps = append(gaps, "No matching markdown pages were found in jazmem.")
+	}
+	return AgenticResponse{
+		Answer:    answer,
+		Citations: citations,
+		Gaps:      gaps,
+		Stats:     response.Stats,
+	}
+}
+
+func synthesizeExtractiveAnswer(results []Result) (string, []Citation) {
+	if len(results) == 0 {
+		return "No matching memory was found.", nil
+	}
+	var b strings.Builder
+	b.WriteString("Most relevant memory:\n")
+	citations := make([]Citation, 0)
+	seenCitations := map[string]bool{}
+	for _, result := range results {
+		wrotePage := false
+		for _, match := range result.Matches {
+			snippet := compactSnippet(match.Snippet)
+			if snippet == "" {
+				continue
+			}
+			if !wrotePage {
+				fmt.Fprintf(&b, "\n%s (%s):\n", result.Title, result.Slug)
+				wrotePage = true
+			}
+			ref := fmt.Sprintf("[Source: [[%s]], chunk %d]", result.Slug, match.Chunk)
+			fmt.Fprintf(&b, "- %s %s\n", snippet, ref)
+			key := result.Slug + "\x00" + string(rune(match.Chunk))
+			if !seenCitations[key] {
+				seenCitations[key] = true
+				citations = append(citations, Citation{
+					Slug:  result.Slug,
+					Title: result.Title,
+					Chunk: match.Chunk,
+				})
+			}
+		}
+	}
+	if len(citations) == 0 {
+		return "Matching pages were found, but no usable snippets were available.", nil
+	}
+	return strings.TrimSpace(b.String()), citations
+}
+
+func compactSnippet(snippet string) string {
+	snippet = stripMarkdownHeadings(snippet)
+	snippet = strings.TrimSpace(snippet)
+	if snippet == "" {
+		return ""
+	}
+	snippet = strings.Join(strings.Fields(snippet), " ")
+	snippet = trimLeadingListMarker(snippet)
+	const maxSnippet = 560
+	if len(snippet) <= maxSnippet {
+		return snippet
+	}
+	cut := maxSnippet
+	if boundary := strings.LastIndexAny(snippet[:maxSnippet], ".!?]"); boundary >= 240 {
+		cut = boundary + 1
+	}
+	return strings.TrimSpace(snippet[:cut]) + "..."
+}
+
+func stripMarkdownHeadings(snippet string) string {
+	lines := strings.Split(snippet, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, " ")
+}
+
+func trimLeadingListMarker(snippet string) string {
+	for {
+		trimmed := strings.TrimSpace(snippet)
+		if strings.HasPrefix(trimmed, "- ") {
+			snippet = strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+			continue
+		}
+		if strings.HasPrefix(trimmed, "* ") {
+			snippet = strings.TrimSpace(strings.TrimPrefix(trimmed, "* "))
+			continue
+		}
+		return trimmed
+	}
+}
+
 func normalizeSearchLimit(limit int) int {
 	if limit <= 0 {
 		return 10
 	}
 	if limit > 50 {
 		return 50
-	}
-	return limit
-}
-
-func chunkCandidateLimit(pageLimit int) int {
-	limit := pageLimit * 4
-	if limit < 10 {
-		limit = 10
-	}
-	if limit > 50 {
-		limit = 50
 	}
 	return limit
 }

@@ -64,6 +64,15 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
+	if isTruthy(r.URL.Query().Get("agentic")) {
+		results, err := s.Memory.AgenticSearch(r.Context(), query, jazmem.AgenticOptions{Limit: limit})
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, results)
+		return
+	}
 	results, err := s.Memory.Retrieve(r.Context(), query, jazmem.SearchOptions{Limit: limit})
 	if err != nil {
 		writeError(w, err)
@@ -156,6 +165,15 @@ func readJSON(r *http.Request, v any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	return dec.Decode(v)
+}
+
+func isTruthy(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func readOptionalJSON(r *http.Request, v any) error {

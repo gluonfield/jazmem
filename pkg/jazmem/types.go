@@ -29,6 +29,10 @@ type SearchOptions struct {
 	Limit int `json:"limit,omitempty"`
 }
 
+type AgenticOptions struct {
+	Limit int `json:"limit,omitempty"`
+}
+
 type Match struct {
 	Chunk   int     `json:"chunk"`
 	Snippet string  `json:"snippet"`
@@ -43,16 +47,30 @@ type Result struct {
 }
 
 type SearchStats struct {
-	Pages  int `json:"pages"`
-	Chunks int `json:"chunks"`
+	Pages     int `json:"pages"`
+	Chunks    int `json:"chunks"`
+	GraphHits int `json:"graph_hits,omitempty"`
 }
 
 type SearchResponse struct {
-	Query    string      `json:"query"`
-	Limit    int         `json:"limit"`
 	Results  []Result    `json:"results"`
 	Stats    SearchStats `json:"stats"`
 	Warnings []string    `json:"warnings,omitempty"`
+}
+
+type Citation struct {
+	Slug  string `json:"slug"`
+	Title string `json:"title,omitempty"`
+	Chunk int    `json:"chunk"`
+}
+
+type AgenticResponse struct {
+	Answer    string      `json:"answer"`
+	Citations []Citation  `json:"citations"`
+	Gaps      []string    `json:"gaps,omitempty"`
+	Stats     SearchStats `json:"stats"`
+	Warnings  []string    `json:"warnings,omitempty"`
+	Results   []Result    `json:"results,omitempty"`
 }
 
 type ReindexOptions struct{}

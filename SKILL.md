@@ -106,12 +106,17 @@ Print human-readable text:
 jazmem --text "what is open for Alice"
 ```
 
-Search returns compact ranked pages with matched chunks merged under each page. It does not call an LLM.
+Return answer-shaped extractive evidence for an agent:
+
+```bash
+jazmem --agentic "what do we know about Alice"
+jazmem --agentic --text "what is open for Alice"
+```
+
+Raw search returns compact ranked pages with matched chunks merged under each page. It uses title/alias candidates, BM25 chunks, and one-hop memlink/backlink expansion. It does not call an LLM.
 
 ```json
 {
-  "query": "Alice Riley Acme",
-  "limit": 5,
   "results": [
     {
       "slug": "people/alice",
@@ -133,12 +138,34 @@ Search returns compact ranked pages with matched chunks merged under each page. 
 }
 ```
 
+Agentic search returns deterministic extractive synthesis:
+
+```json
+{
+  "answer": "Most relevant memory:\n\nAlice Smith (people/alice):\n- Alice and Riley are friends... [Source: [[people/alice]], chunk 0]",
+  "citations": [
+    {
+      "slug": "people/alice",
+      "title": "Alice Smith",
+      "chunk": 0
+    }
+  ],
+  "stats": {
+    "pages": 1,
+    "chunks": 1
+  }
+}
+```
+
+Use `--agentic` when the next step is answering the user and raw chunk arrays would be noisy. Use raw search when deciding which pages to read or edit.
+
 Interpretation:
 
 - `results` are page-level hits; cite their slugs when answering.
 - `matches` are the matched chunks under each page.
 - `stats.pages` counts returned pages.
 - `stats.chunks` counts returned matched chunks.
+- `stats.graph_hits`, when present, counts extra pages added by link/backlink expansion.
 - `score` is the best match score for that page. Lower is better for SQLite BM25.
 - `title` comes from frontmatter `title`, then first `# H1`, then slug tail.
 - `slug` is the markdown path under root without `.md`.
@@ -430,10 +457,15 @@ Notability gate:
 
 `jazmem <query>` and `jazmem search <query>` return `SearchResponse`:
 
-- `query`: original query
-- `limit`: requested result limit
 - `results`: ranked page hits with merged chunk matches
-- `stats`: returned page count and matched chunk count
+- `stats`: returned page count, matched chunk count, and optional graph expansion count
+
+`jazmem --agentic <query>` returns `AgenticResponse`:
+
+- `answer`: extractive answer-shaped evidence with inline source references
+- `citations`: slug/chunk citations grounding the answer
+- `gaps`: missing-memory notes when no usable evidence is found
+- `stats`: same retrieval stats as raw search
 
 `jazmem get <slug>` returns `Page`:
 
@@ -502,6 +534,7 @@ Search:
 
 ```bash
 curl 'http://127.0.0.1:9477/search?q=Alice%20Riley&limit=5'
+curl 'http://127.0.0.1:9477/search?q=Alice%20Riley&agentic=1'
 ```
 
 Read raw markdown:

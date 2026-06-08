@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,8 +48,22 @@ func TestSearchEndpoint(t *testing.T) {
 	if len(payload.Results) != 1 || payload.Results[0].Title != "Search note" {
 		t.Fatalf("unexpected results %#v", payload.Results)
 	}
-	if payload.Query != "jazmem" || payload.Limit != 3 || payload.Stats.Pages != 1 || payload.Stats.Chunks != 1 {
+	if payload.Stats.Pages != 1 || payload.Stats.Chunks != 1 {
 		t.Fatalf("unexpected search envelope %#v", payload)
+	}
+
+	agenticReq := httptest.NewRequest(http.MethodGet, "/search?q=jazmem&agentic=1", nil)
+	agenticResp := httptest.NewRecorder()
+	handler.ServeHTTP(agenticResp, agenticReq)
+	if agenticResp.Code != http.StatusOK {
+		t.Fatalf("agentic search status = %d body=%s", agenticResp.Code, agenticResp.Body.String())
+	}
+	var agentic jazmem.AgenticResponse
+	if err := json.Unmarshal(agenticResp.Body.Bytes(), &agentic); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(agentic.Answer, "jazmem") || len(agentic.Citations) == 0 || agentic.Citations[0].Slug != "inbox/search-note" {
+		t.Fatalf("unexpected agentic payload %#v", agentic)
 	}
 }
 

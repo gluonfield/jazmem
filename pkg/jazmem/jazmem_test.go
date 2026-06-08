@@ -119,6 +119,72 @@ func TestSearchFallsBackToBroadTokenMatch(t *testing.T) {
 	}
 }
 
+func TestSearchExpandsExplicitMemlinks(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	mem, err := Open(Config{Root: root, DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mem.Close()
+
+	if err := mem.fs.WritePage("people/alice", "---\ntitle: Alice Smith\naliases: [Alice]\n---\n\n# Alice Smith\n\nAlice is friends with [[people/riley]].\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.fs.WritePage("people/riley", "---\ntitle: Riley Jones\naliases: [Riley]\n---\n\n# Riley Jones\n\nRiley works on memory systems.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.Reindex(context.Background(), ReindexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := mem.Retrieve(context.Background(), "Alice", SearchOptions{Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slugs := map[string]bool{}
+	for _, result := range response.Results {
+		slugs[result.Slug] = true
+	}
+	if !slugs["people/alice"] || !slugs["people/riley"] {
+		t.Fatalf("expected direct hit and linked page, got %#v", response.Results)
+	}
+	if response.Stats.GraphHits < 1 {
+		t.Fatalf("expected graph hits, got %#v", response.Stats)
+	}
+}
+
+func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	mem, err := Open(Config{Root: root, DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mem.Close()
+
+	if err := mem.fs.WritePage("companies/leeroo", "---\ntitle: Leeroo\naliases: [Leeroo]\n---\n\n# Leeroo\n\nLeeroo is connected to [[projects/ink]] in the opportunity corpus.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.fs.WritePage("projects/ink", "---\ntitle: Ink\n---\n\n# Ink\n\nInk is a deployment platform.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.Reindex(context.Background(), ReindexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := mem.AgenticSearch(context.Background(), "Leeroo", AgenticOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(response.Answer, "Leeroo") || len(response.Citations) == 0 {
+		t.Fatalf("unexpected agentic response %#v", response)
+	}
+	if response.Citations[0].Slug != "companies/leeroo" || response.Citations[0].Chunk != 0 {
+		t.Fatalf("unexpected citations %#v", response.Citations)
+	}
+}
+
 func TestLinkHygieneWritesRelationshipReview(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
