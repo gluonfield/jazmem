@@ -336,7 +336,7 @@ func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	response, err := mem.AgenticSearch(context.Background(), "Leeroo", AgenticOptions{Limit: 3})
+	response, err := mem.AgenticSearch(context.Background(), "Leeroo", AgenticOptions{Limit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,6 +348,9 @@ func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
 	}
 	if response.ModelUsed != "test-model" || !response.SynthesisOK || response.Rounds != 1 {
 		t.Fatalf("unexpected synthesis metadata %#v", response)
+	}
+	if response.Stats.Pages < 2 {
+		t.Fatalf("agentic search should ignore caller limit and gather broader context, got stats %#v", response.Stats)
 	}
 }
 

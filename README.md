@@ -114,7 +114,7 @@ jazmem "what connects Alice and Widget Co"
 jazmem eval
 ```
 
-`--agentic` calls OpenRouter and requires `OPENROUTER_API_KEY`. `jazmem` loads `.env` from the current tree when present, including `jaz/backend/.env` in this workspace.
+`--agentic` calls OpenRouter and requires `OPENROUTER_API_KEY`. It uses an internal context budget, so `--limit` does not control agentic retrieval. `jazmem` loads `.env` from the current tree when present, including `jaz/backend/.env` in this workspace.
 
 Read pages:
 
@@ -265,7 +265,7 @@ returns `AgenticResponse`:
 }
 ```
 
-This is OpenRouter-backed synthesis over retrieved markdown evidence. Raw retrieval remains deterministic and free; `--agentic` requires `OPENROUTER_API_KEY`.
+This is OpenRouter-backed synthesis over retrieved markdown evidence. Raw retrieval remains deterministic and free; `--agentic` requires `OPENROUTER_API_KEY` and uses its own retrieval budget instead of the CLI `--limit`.
 
 Eval:
 

@@ -115,7 +115,7 @@ jazmem --agentic --text "what is open for Alice"
 
 Raw search returns compact ranked pages with matched chunks merged under each page. It uses title/alias candidates, BM25 chunks with per-page max-pool, typed relationship retrieval, and one-hop memlink/backlink expansion. It does not call an LLM.
 
-`--agentic` calls OpenRouter and requires `OPENROUTER_API_KEY`. Use it when the next step is answering the user and raw chunk arrays would be noisy. Use raw search when deciding which pages to read or edit.
+`--agentic` calls OpenRouter and requires `OPENROUTER_API_KEY`. It uses its own internal context budget; do not use `--limit` to tune agentic retrieval. Use raw search when deciding which pages to read or edit.
 
 ```json
 {
@@ -507,6 +507,8 @@ Notability gate:
 - `gaps`: missing-memory notes from the model
 - `stats`: same retrieval stats as raw search
 - `model_used`, `rounds`, `synthesis_ok`, `diagnostics`
+
+`--limit` is for raw search and eval. Agentic mode intentionally ignores it and gathers a broader default context before synthesis.
 
 `jazmem get <slug>` returns `Page`:
 

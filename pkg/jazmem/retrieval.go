@@ -12,6 +12,8 @@ import (
 	sqlitestore "github.com/wins/jazmem/internal/store/sqlite"
 )
 
+const agenticRetrievalLimit = 12
+
 func (m *Memory) Search(ctx context.Context, query string, opts SearchOptions) ([]Result, error) {
 	response, err := m.retrieve(ctx, query, opts.Limit)
 	if err != nil {
@@ -25,7 +27,7 @@ func (m *Memory) Retrieve(ctx context.Context, query string, opts SearchOptions)
 }
 
 func (m *Memory) AgenticSearch(ctx context.Context, query string, opts AgenticOptions) (AgenticResponse, error) {
-	response, err := m.retrieve(ctx, query, opts.Limit)
+	response, err := m.retrieve(ctx, query, agenticRetrievalLimit)
 	if err != nil {
 		return AgenticResponse{}, err
 	}
