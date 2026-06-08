@@ -213,7 +213,7 @@ MCP client config:
 
 Tools:
 
-- `jazmem_search`: input `{ "query": "...", "limit": 5 }`; output `SearchResponse`.
+- `jazmem_search`: input `{ "query": "..." }`; output `AgenticResponse`; requires `OPENROUTER_API_KEY`.
 - `jazmem_get`: input `{ "slug": "people/alice" }`; primary text content is raw markdown. Structured output is `{ "found": true, "slug": "...", "path": "...", "title": "...", "raw": "..." }` or `{ "found": false, "error": "not found: people/alice", "suggestions": [...] }`.
 
 MCP is read-only. There is no MCP write/capture/index/dream/checkpoint tool. To store data, edit markdown directly. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations.

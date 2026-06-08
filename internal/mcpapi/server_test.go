@@ -3,6 +3,8 @@ package mcpapi
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +15,13 @@ import (
 )
 
 func TestServerTools(t *testing.T) {
-	mem := testMemory(t)
+	llm := fakeOpenRouter(t, `{"answer":"Alice works on jazmem MCP testing.","citation_ids":[1],"gaps":[],"warnings":[]}`)
+	defer llm.Close()
+	mem := testMemory(t, jazmem.Config{
+		OpenRouterAPIKey:  "test-key",
+		OpenRouterBaseURL: llm.URL,
+		OpenRouterModel:   "test-model",
+	})
 	defer mem.Close()
 
 	if err := os.WriteFile(
@@ -44,7 +52,7 @@ func TestServerTools(t *testing.T) {
 
 	searchCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
 		Name:      "jazmem_search",
-		Arguments: map[string]any{"query": "Alice jazmem MCP", "limit": 5},
+		Arguments: map[string]any{"query": "Alice jazmem MCP"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -52,8 +60,8 @@ func TestServerTools(t *testing.T) {
 	if searchCall.IsError {
 		t.Fatalf("search tool error: %#v", searchCall.Content)
 	}
-	search := decodeStructured[jazmem.SearchResponse](t, searchCall)
-	if len(search.Results) == 0 || search.Results[0].Slug != "people/alice-bentick" {
+	search := decodeStructured[jazmem.AgenticResponse](t, searchCall)
+	if !strings.Contains(search.Answer, "Alice works") || search.ModelUsed != "test-model" || len(search.Citations) == 0 || search.Citations[0].Slug != "people/alice-bentick" {
 		t.Fatalf("unexpected search response %#v", search)
 	}
 
@@ -93,16 +101,34 @@ func TestServerTools(t *testing.T) {
 	}
 }
 
-func testMemory(t *testing.T) *jazmem.Memory {
+func testMemory(t *testing.T, cfg jazmem.Config) *jazmem.Memory {
 	t.Helper()
-	mem, err := jazmem.Open(jazmem.Config{
-		Root:   t.TempDir(),
-		DBPath: filepath.Join(t.TempDir(), "index.sqlite"),
-	})
+	cfg.Root = t.TempDir()
+	cfg.DBPath = filepath.Join(t.TempDir(), "index.sqlite")
+	mem, err := jazmem.Open(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return mem
+}
+
+func fakeOpenRouter(t *testing.T, content string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected OpenRouter path %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			t.Fatalf("missing authorization header")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"model": "test-model",
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": content}},
+			},
+		})
+	}))
 }
 
 func connectClient(t *testing.T, server *mcp.Server) *mcp.ClientSession {

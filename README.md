@@ -204,7 +204,7 @@ Example MCP client config:
 
 Tools:
 
-- `jazmem_search`: deterministic raw retrieval with `query` and optional `limit`.
+- `jazmem_search`: OpenRouter-backed answer synthesis with citations and gaps. Input is `query`; output is `AgenticResponse`.
 - `jazmem_get`: read a page by slug. The primary MCP text content is the raw markdown; structured output also includes slug, title, path, and not-found suggestions.
 
 MCP is intentionally read-only. There is no MCP write/capture/index/dream/checkpoint tool. Agents store memory by editing markdown files. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations.

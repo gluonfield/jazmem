@@ -28,7 +28,7 @@ func New(memory *jazmem.Memory) *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "jazmem_search",
 		Title:       "Search jazmem",
-		Description: "Run deterministic jazmem retrieval over markdown memory. Use this before answering from memory or deciding which pages to read/edit.",
+		Description: "Search jazmem and synthesize an evidence-grounded answer with citations and gaps. Use this before answering from memory.",
 	}, service.Search)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "jazmem_get",
@@ -40,20 +40,15 @@ func New(memory *jazmem.Memory) *mcp.Server {
 }
 
 type SearchInput struct {
-	Query string `json:"query" jsonschema:"memory query to search for"`
-	Limit int    `json:"limit,omitempty" jsonschema:"maximum returned pages for raw retrieval; defaults to 10"`
+	Query string `json:"query" jsonschema:"question or topic to answer from jazmem memory"`
 }
 
-func (s *Service) Search(ctx context.Context, _ *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, jazmem.SearchResponse, error) {
+func (s *Service) Search(ctx context.Context, _ *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, jazmem.AgenticResponse, error) {
 	query := strings.TrimSpace(input.Query)
 	if query == "" {
-		return nil, jazmem.SearchResponse{}, errors.New("query is required")
+		return nil, jazmem.AgenticResponse{}, errors.New("query is required")
 	}
-	limit, err := normalizeOptionalLimit(input.Limit)
-	if err != nil {
-		return nil, jazmem.SearchResponse{}, err
-	}
-	response, err := s.Memory.Retrieve(ctx, query, jazmem.SearchOptions{Limit: limit})
+	response, err := s.Memory.AgenticSearch(ctx, query, jazmem.AgenticOptions{})
 	return nil, response, err
 }
 
@@ -89,16 +84,6 @@ func (s *Service) GetPage(ctx context.Context, _ *mcp.CallToolRequest, input Pag
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: page.Raw}},
 	}, pageOutput(page), nil
-}
-
-func normalizeOptionalLimit(limit int) (int, error) {
-	if limit == 0 {
-		return 10, nil
-	}
-	if limit < 0 {
-		return 0, errors.New("limit must be positive")
-	}
-	return limit, nil
 }
 
 func pageOutput(page jazmem.Page) PageOutput {
