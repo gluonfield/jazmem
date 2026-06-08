@@ -47,7 +47,7 @@ func TestSearchEndpoint(t *testing.T) {
 	if len(payload.Results) != 1 || payload.Results[0].Title != "Search note" {
 		t.Fatalf("unexpected results %#v", payload.Results)
 	}
-	if payload.Query != "jazmem" || payload.Limit != 3 || payload.Stats.Pages != 1 || payload.Stats.Chunks != 1 || payload.Stats.Mode != "bm25" {
+	if payload.Query != "jazmem" || payload.Limit != 3 || payload.Stats.Pages != 1 || payload.Stats.Chunks != 1 {
 		t.Fatalf("unexpected search envelope %#v", payload)
 	}
 }

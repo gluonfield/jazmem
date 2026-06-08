@@ -14,18 +14,39 @@ It has the right substrate for a smaller, cleaner version:
 - git history for markdown memory
 - SQLite FTS5/BM25 search through `modernc.org/sqlite`
 - wikilink and mention extraction
-- compact search responses with slugs, snippets, and stats
+- compact search responses with page results, matched chunks, and stats
 - simple scheduler/dream/link-hygiene scaffolding
 
 The gbrain features most likely to matter for retrieval quality are:
 
-1. Memlink graph retrieval: explicit links and backlinks should expand the candidate set around the initial BM25 hits.
-2. Reranking: a cross-encoder or strong LLM reranker is the biggest likely precision lift after candidate generation.
-3. Evaluation: a fixed personal benchmark is needed before adding embeddings or tuning boosts.
-4. Incremental indexing: required once the corpus grows, but not the main quality driver.
-5. Dream consolidation: useful only if it edits canonical pages conservatively with citations and review queues.
+1. Page-level candidate merging: merge chunk, alias, title, explicit-link, mention, and future vector/rerank evidence by slug before returning results.
+2. Memlink graph expansion: explicit links and backlinks should expand the candidate set around initial BM25/title/alias hits.
+3. Reranking: a cross-encoder or strong LLM reranker is the biggest likely precision lift after candidate generation.
+4. Evaluation: a fixed personal benchmark is needed before adding embeddings or tuning boosts.
+5. Incremental indexing: required once the corpus grows, but not the main quality driver.
+6. Dream consolidation: useful only if it edits canonical pages conservatively with citations and review queues.
 
 Current jazmem retrieval is BM25-only over chunks, with strict-then-broad token matching. It does not use embeddings and does not use a reranker.
+
+Do not copy gbrain wholesale. These are not v1 performance requirements for jazmem:
+
+- 20+ phase nightly cycle machinery
+- remote sync/federation layers
+- job queues/minion infrastructure
+- broad boost/RRF tuning before an eval says it helps
+- embeddings before synonym recall is a demonstrated problem
+- typed edge extraction before untyped memlink/backlink retrieval is working
+
+The target retrieval flow is:
+
+```text
+query
+-> candidate generation: title/alias exact, BM25 chunks, explicit links, mentions, optional vectors
+-> merge by slug: one page result with matched evidence
+-> graph expansion: backlinks/neighbors around strongest pages
+-> rerank top candidates
+-> return compact page results
+```
 
 ## Install
 
@@ -181,20 +202,24 @@ Useful locations:
     {
       "slug": "concepts/ink-enterprise-deployment-strategy",
       "title": "Ink Enterprise Deployment Strategy",
-      "chunk": 0,
-      "snippet": "Strongest current enterprise wedge...",
-      "score": -4.79975572
+      "score": -4.79975572,
+      "matches": [
+        {
+          "chunk": 0,
+          "snippet": "Strongest current enterprise wedge...",
+          "score": -4.79975572
+        }
+      ]
     }
   ],
   "stats": {
     "pages": 1,
-    "chunks": 1,
-    "mode": "bm25"
+    "chunks": 1
   }
 }
 ```
 
-This is ranked chunk retrieval, not answer synthesis. No chat model is called.
+This is ranked page retrieval with matched chunk evidence, not answer synthesis. No chat model is called.
 
 ## What Is Not Implemented Yet
 

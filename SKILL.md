@@ -106,7 +106,7 @@ Print human-readable text:
 jazmem --text "what is open for Alice"
 ```
 
-Search returns compact ranked chunks. It does not call an LLM.
+Search returns compact ranked pages with matched chunks merged under each page. It does not call an LLM.
 
 ```json
 {
@@ -116,25 +116,30 @@ Search returns compact ranked chunks. It does not call an LLM.
     {
       "slug": "people/alice",
       "title": "Alice Smith",
-      "chunk": 0,
-      "snippet": "Alice and [Riley] are friends...",
-      "score": -0.00000157
+      "score": -0.00000157,
+      "matches": [
+        {
+          "chunk": 0,
+          "snippet": "Alice and [Riley] are friends...",
+          "score": -0.00000157
+        }
+      ]
     }
   ],
   "stats": {
     "pages": 1,
-    "chunks": 1,
-    "mode": "bm25"
+    "chunks": 1
   }
 }
 ```
 
 Interpretation:
 
-- `results` are the grounding chunks; cite their slugs when answering.
-- `stats.pages` counts unique pages in the BM25 result set.
-- `stats.chunks` counts matched chunks.
-- `score` is SQLite BM25. Lower is better.
+- `results` are page-level hits; cite their slugs when answering.
+- `matches` are the matched chunks under each page.
+- `stats.pages` counts returned pages.
+- `stats.chunks` counts returned matched chunks.
+- `score` is the best match score for that page. Lower is better for SQLite BM25.
 - `title` comes from frontmatter `title`, then first `# H1`, then slug tail.
 - `slug` is the markdown path under root without `.md`.
 
@@ -427,8 +432,8 @@ Notability gate:
 
 - `query`: original query
 - `limit`: requested result limit
-- `results`: ranked BM25 chunk hits
-- `stats`: unique page count, chunk count, and retrieval mode
+- `results`: ranked page hits with merged chunk matches
+- `stats`: returned page count and matched chunk count
 
 `jazmem get <slug>` returns `Page`:
 

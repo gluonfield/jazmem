@@ -29,18 +29,22 @@ type SearchOptions struct {
 	Limit int `json:"limit,omitempty"`
 }
 
-type Result struct {
-	Slug    string  `json:"slug"`
-	Title   string  `json:"title"`
+type Match struct {
 	Chunk   int     `json:"chunk"`
 	Snippet string  `json:"snippet"`
 	Score   float64 `json:"score"`
 }
 
+type Result struct {
+	Slug    string  `json:"slug"`
+	Title   string  `json:"title"`
+	Score   float64 `json:"score"`
+	Matches []Match `json:"matches"`
+}
+
 type SearchStats struct {
-	Pages  int    `json:"pages"`
-	Chunks int    `json:"chunks"`
-	Mode   string `json:"mode"`
+	Pages  int `json:"pages"`
+	Chunks int `json:"chunks"`
 }
 
 type SearchResponse struct {
