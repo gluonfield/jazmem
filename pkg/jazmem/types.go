@@ -3,9 +3,12 @@ package jazmem
 import "time"
 
 type Config struct {
-	Root   string
-	DBPath string
-	Now    func() time.Time
+	Root              string
+	DBPath            string
+	OpenRouterAPIKey  string
+	OpenRouterModel   string
+	OpenRouterBaseURL string
+	Now               func() time.Time
 }
 
 type PageRef struct {
@@ -65,12 +68,16 @@ type Citation struct {
 }
 
 type AgenticResponse struct {
-	Answer    string      `json:"answer"`
-	Citations []Citation  `json:"citations"`
-	Gaps      []string    `json:"gaps,omitempty"`
-	Stats     SearchStats `json:"stats"`
-	Warnings  []string    `json:"warnings,omitempty"`
-	Results   []Result    `json:"results,omitempty"`
+	Answer      string         `json:"answer"`
+	Citations   []Citation     `json:"citations"`
+	Gaps        []string       `json:"gaps,omitempty"`
+	Stats       SearchStats    `json:"stats"`
+	Warnings    []string       `json:"warnings,omitempty"`
+	ModelUsed   string         `json:"model_used,omitempty"`
+	Rounds      int            `json:"rounds"`
+	SynthesisOK bool           `json:"synthesis_ok"`
+	Diagnostics map[string]int `json:"diagnostics,omitempty"`
+	Results     []Result       `json:"results,omitempty"`
 }
 
 type ReindexOptions struct{}
@@ -104,10 +111,44 @@ type DreamOptions struct {
 
 type DreamReport struct {
 	RunSlug     string   `json:"run_slug"`
+	ReviewSlug  string   `json:"review_slug,omitempty"`
 	InputSlugs  []string `json:"input_slugs"`
 	Promoted    int      `json:"promoted"`
 	ReviewItems int      `json:"review_items"`
 	Skipped     int      `json:"skipped"`
+	ModelUsed   string   `json:"model_used,omitempty"`
+	Warnings    []string `json:"warnings,omitempty"`
+}
+
+type EvalCase struct {
+	Query         string   `json:"query"`
+	ExpectedSlugs []string `json:"expected_slugs"`
+	Limit         int      `json:"limit,omitempty"`
+}
+
+type EvalOptions struct {
+	Cases []EvalCase `json:"cases,omitempty"`
+	Limit int        `json:"limit,omitempty"`
+}
+
+type EvalCaseResult struct {
+	Query          string   `json:"query"`
+	ExpectedSlugs  []string `json:"expected_slugs"`
+	ReturnedSlugs  []string `json:"returned_slugs"`
+	Hits           int      `json:"hits"`
+	Precision      float64  `json:"precision"`
+	Recall         float64  `json:"recall"`
+	ReciprocalRank float64  `json:"reciprocal_rank"`
+}
+
+type EvalReport struct {
+	CaseCount   int              `json:"case_count"`
+	Limit       int              `json:"limit"`
+	HitRate     float64          `json:"hit_rate"`
+	Precision   float64          `json:"precision"`
+	Recall      float64          `json:"recall"`
+	MRR         float64          `json:"mrr"`
+	CaseResults []EvalCaseResult `json:"cases"`
 }
 
 type RelationshipProposal struct {

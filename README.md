@@ -28,7 +28,7 @@ The gbrain features most likely to matter for retrieval quality are:
 6. Incremental indexing: required once the corpus grows, but not the main quality driver.
 7. Dream consolidation: useful only if it edits canonical pages conservatively with citations and review queues.
 
-Current jazmem retrieval uses title/alias matching, BM25 chunks with per-page max-pool, typed relationship retrieval, page-level merging, and one-hop memlink/backlink expansion. It does not use embeddings, a reranker, or a chat-model synthesizer.
+Current jazmem retrieval uses title/alias matching, BM25 chunks with per-page max-pool, typed relationship retrieval, page-level merging, and one-hop memlink/backlink expansion. Agentic answer synthesis is an OpenRouter layer over those retrieved results. It does not use embeddings or a reranker.
 
 Do not copy gbrain wholesale. These are not v1 performance requirements for jazmem:
 
@@ -48,7 +48,7 @@ query
 -> merge by slug: one page result with matched evidence
 -> graph expansion: explicit links, backlinks, and mentions around strongest pages
 -> optional future rerank top candidates
--> return compact raw results or extractive agentic answer
+-> return compact raw results or OpenRouter-backed agentic answer
 ```
 
 ## Install
@@ -111,7 +111,10 @@ jazmem search --text "physics reasoning environment"
 jazmem --agentic "what do we know about Leeroo"
 jazmem "who works at Acme"
 jazmem "what connects Alice and Widget Co"
+jazmem eval
 ```
+
+`--agentic` calls OpenRouter and requires `OPENROUTER_API_KEY`. `jazmem` loads `.env` from the current tree when present, including `jaz/backend/.env` in this workspace.
 
 Read pages:
 
@@ -134,12 +137,14 @@ Commit markdown progress:
 jazmem checkpoint "updated ink enterprise strategy"
 ```
 
-Run maintenance scaffolding:
+Run maintenance:
 
 ```bash
 jazmem dream
 jazmem link-hygiene
 ```
+
+`dream` calls OpenRouter. It writes a dream run page, appends only validated high-confidence bullets to existing canonical pages, and sends ambiguous items to `dreams/review/`.
 
 ## Server
 
@@ -152,21 +157,21 @@ jazmem-server
 Default address:
 
 ```text
-127.0.0.1:8765
+127.0.0.1:9477
 ```
 
 Endpoints:
 
 ```bash
-curl 'http://127.0.0.1:8765/health'
-curl 'http://127.0.0.1:8765/doctor'
-curl 'http://127.0.0.1:8765/search?q=Ink%20enterprise&limit=5'
-curl 'http://127.0.0.1:8765/search?q=Ink%20enterprise&agentic=1'
-curl 'http://127.0.0.1:8765/file/projects/ink'
-curl 'http://127.0.0.1:8765/file/projects/ink?raw=1'
-curl -X POST 'http://127.0.0.1:8765/reindex'
-curl -X POST 'http://127.0.0.1:8765/dream'
-curl -X POST 'http://127.0.0.1:8765/link-hygiene'
+curl 'http://127.0.0.1:9477/health'
+curl 'http://127.0.0.1:9477/doctor'
+curl 'http://127.0.0.1:9477/search?q=Ink%20enterprise&limit=5'
+curl 'http://127.0.0.1:9477/search?q=Ink%20enterprise&agentic=1'
+curl 'http://127.0.0.1:9477/file/projects/ink'
+curl 'http://127.0.0.1:9477/file/projects/ink?raw=1'
+curl -X POST 'http://127.0.0.1:9477/reindex'
+curl -X POST 'http://127.0.0.1:9477/dream'
+curl -X POST 'http://127.0.0.1:9477/link-hygiene'
 ```
 
 There is no capture endpoint. Store data by editing markdown files.
@@ -230,14 +235,14 @@ Agentic search:
 
 ```bash
 jazmem --agentic "what do we know about Leeroo"
-curl 'http://127.0.0.1:8765/search?q=Leeroo&agentic=1'
+curl 'http://127.0.0.1:9477/search?q=Leeroo&agentic=1'
 ```
 
 returns `AgenticResponse`:
 
 ```json
 {
-  "answer": "Most relevant memory:\n\nLeeroo (companies/leeroo):\n- Leeroo is connected to [[projects/ink]]... [Source: [[companies/leeroo]], chunk 0]",
+  "answer": "Leeroo is connected to Ink through the deployment collaboration...",
   "citations": [
     {
       "slug": "companies/leeroo",
@@ -248,11 +253,29 @@ returns `AgenticResponse`:
   "stats": {
     "pages": 1,
     "chunks": 1
+  },
+  "model_used": "openai/gpt-5.4-mini",
+  "rounds": 1,
+  "synthesis_ok": true,
+  "diagnostics": {
+    "pages_gathered": 1,
+    "chunks_gathered": 1,
+    "graph_hits": 0
   }
 }
 ```
 
-This is deterministic, extractive synthesis for agents. It packages evidence and citations into an answer-shaped response, but it is not yet chat-model prose like gbrain. Jaz can wrap this with its own LLM provider without changing markdown or SQLite.
+This is OpenRouter-backed synthesis over retrieved markdown evidence. Raw retrieval remains deterministic and free; `--agentic` requires `OPENROUTER_API_KEY`.
+
+Eval:
+
+```bash
+jazmem eval
+jazmem eval --limit 10
+jazmem eval --file ./my-eval.json
+```
+
+Eval uses raw retrieval and scores returned slugs against expected slugs. It reports hit rate, precision, recall, and MRR.
 
 ## Typed Relationships
 
@@ -296,9 +319,7 @@ No LLM is used for this path.
 - Embeddings
 - Vector search
 - Reranker
-- Fixed personal eval set
-- Durable dream workflow
 - Full ingestion connectors
-- LLM answer synthesis and richer gap analysis
+- Durable workflow/checkpointing for dream beyond markdown run pages
 
 These should be added behind the existing package/CLI surfaces without changing markdown as the source of truth.

@@ -106,7 +106,7 @@ Print human-readable text:
 jazmem --text "what is open for Alice"
 ```
 
-Return answer-shaped extractive evidence for an agent:
+Return an OpenRouter-synthesized answer grounded in retrieved evidence:
 
 ```bash
 jazmem --agentic "what do we know about Alice"
@@ -114,6 +114,8 @@ jazmem --agentic --text "what is open for Alice"
 ```
 
 Raw search returns compact ranked pages with matched chunks merged under each page. It uses title/alias candidates, BM25 chunks with per-page max-pool, typed relationship retrieval, and one-hop memlink/backlink expansion. It does not call an LLM.
+
+`--agentic` calls OpenRouter and requires `OPENROUTER_API_KEY`. Use it when the next step is answering the user and raw chunk arrays would be noisy. Use raw search when deciding which pages to read or edit.
 
 ```json
 {
@@ -138,11 +140,11 @@ Raw search returns compact ranked pages with matched chunks merged under each pa
 }
 ```
 
-Agentic search returns deterministic extractive synthesis:
+Agentic search returns LLM synthesis over retrieved evidence:
 
 ```json
 {
-  "answer": "Most relevant memory:\n\nAlice Smith (people/alice):\n- Alice and Riley are friends... [Source: [[people/alice]], chunk 0]",
+  "answer": "Alice and Riley are friends and have worked on jazmem search.",
   "citations": [
     {
       "slug": "people/alice",
@@ -153,11 +155,17 @@ Agentic search returns deterministic extractive synthesis:
   "stats": {
     "pages": 1,
     "chunks": 1
+  },
+  "model_used": "openai/gpt-5.4-mini",
+  "rounds": 1,
+  "synthesis_ok": true,
+  "diagnostics": {
+    "pages_gathered": 1,
+    "chunks_gathered": 1,
+    "graph_hits": 0
   }
 }
 ```
-
-Use `--agentic` when the next step is answering the user and raw chunk arrays would be noisy. Use raw search when deciding which pages to read or edit.
 
 Interpretation:
 
@@ -494,10 +502,11 @@ Notability gate:
 
 `jazmem --agentic <query>` returns `AgenticResponse`:
 
-- `answer`: extractive answer-shaped evidence with inline source references
+- `answer`: OpenRouter-synthesized answer grounded only in retrieved evidence
 - `citations`: slug/chunk citations grounding the answer
-- `gaps`: missing-memory notes when no usable evidence is found
+- `gaps`: missing-memory notes from the model
 - `stats`: same retrieval stats as raw search
+- `model_used`, `rounds`, `synthesis_ok`, `diagnostics`
 
 `jazmem get <slug>` returns `Page`:
 
@@ -516,7 +525,7 @@ Notability gate:
 - `message`
 - `files_added`
 
-`jazmem index`, `jazmem dream`, `jazmem link-hygiene`, and `jazmem doctor` return JSON reports.
+`jazmem index`, `jazmem dream`, `jazmem link-hygiene`, `jazmem eval`, and `jazmem doctor` return JSON reports.
 
 `jazmem index` includes `typed_links`; `jazmem doctor` includes `typed_link_count`.
 
@@ -536,17 +545,28 @@ Inspect counts and paths:
 jazmem doctor
 ```
 
-Run deterministic dream scaffold:
+Run OpenRouter-backed dream consolidation:
 
 ```bash
 jazmem dream
 ```
+
+Dream writes a run page under `dreams/runs/`, edits only existing canonical pages with validated cited bullets, and writes ambiguous candidates to `dreams/review/`. It requires `OPENROUTER_API_KEY`.
 
 Generate relationship review proposals:
 
 ```bash
 jazmem link-hygiene
 ```
+
+Run the fixed retrieval eval set:
+
+```bash
+jazmem eval
+jazmem eval --limit 10
+```
+
+Eval does not call an LLM. It checks expected slugs against raw retrieval results and reports hit rate, precision, recall, and MRR.
 
 Basic health check after writes:
 

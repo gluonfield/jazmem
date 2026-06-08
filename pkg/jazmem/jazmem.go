@@ -8,6 +8,7 @@ import (
 	"github.com/wins/jazmem/internal/hygiene"
 	"github.com/wins/jazmem/internal/indexer"
 	"github.com/wins/jazmem/internal/ingest"
+	"github.com/wins/jazmem/internal/llm"
 	"github.com/wins/jazmem/internal/memfs"
 	"github.com/wins/jazmem/internal/search"
 	sqlitestore "github.com/wins/jazmem/internal/store/sqlite"
@@ -25,6 +26,7 @@ type Memory struct {
 	dream    *dream.Service
 	hygiene  *hygiene.Service
 	ingester *ingest.Service
+	llm      *llm.Client
 }
 
 func Open(cfg Config) (*Memory, error) {
@@ -49,9 +51,15 @@ func Open(cfg Config) (*Memory, error) {
 	m.indexer = &indexer.Indexer{FS: fs, Store: store}
 	m.search = &search.Service{Store: store}
 	m.ingester = &ingest.Service{}
+	m.llm = llm.New(llm.Config{
+		APIKey:  cfg.OpenRouterAPIKey,
+		Model:   cfg.OpenRouterModel,
+		BaseURL: cfg.OpenRouterBaseURL,
+	})
 	m.dream = &dream.Service{
 		FS:  fs,
 		Now: m.timeNow,
+		LLM: m.llm,
 		Reindex: func(ctx context.Context) error {
 			_, err := m.Reindex(ctx, ReindexOptions{})
 			return err

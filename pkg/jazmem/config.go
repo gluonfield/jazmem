@@ -1,10 +1,19 @@
 package jazmem
 
 import (
+	"bufio"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
+
+const (
+	defaultOpenRouterBaseURL = "https://openrouter.ai/api/v1"
+	defaultOpenRouterModel   = "openai/gpt-5.4-mini"
+)
+
+var loadEnvOnce sync.Once
 
 func DefaultRoot() string {
 	home, err := os.UserHomeDir()
@@ -31,6 +40,8 @@ func DefaultDBPathForRoot(root string) string {
 }
 
 func ResolveConfig(cfg Config) Config {
+	loadEnvOnce.Do(loadEnvFiles)
+
 	root := strings.TrimSpace(cfg.Root)
 	if root == "" {
 		root = strings.TrimSpace(os.Getenv("JAZMEM_ROOT"))
@@ -49,6 +60,25 @@ func ResolveConfig(cfg Config) Config {
 	}
 	cfg.Root = root
 	cfg.DBPath = cleanPath(dbPath)
+
+	if strings.TrimSpace(cfg.OpenRouterAPIKey) == "" {
+		cfg.OpenRouterAPIKey = strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
+	}
+	if strings.TrimSpace(cfg.OpenRouterModel) == "" {
+		cfg.OpenRouterModel = strings.TrimSpace(os.Getenv("JAZMEM_OPENROUTER_MODEL"))
+	}
+	if strings.TrimSpace(cfg.OpenRouterModel) == "" {
+		cfg.OpenRouterModel = strings.TrimSpace(os.Getenv("OPENROUTER_MODEL"))
+	}
+	if strings.TrimSpace(cfg.OpenRouterModel) == "" {
+		cfg.OpenRouterModel = defaultOpenRouterModel
+	}
+	if strings.TrimSpace(cfg.OpenRouterBaseURL) == "" {
+		cfg.OpenRouterBaseURL = strings.TrimSpace(os.Getenv("JAZMEM_OPENROUTER_BASE_URL"))
+	}
+	if strings.TrimSpace(cfg.OpenRouterBaseURL) == "" {
+		cfg.OpenRouterBaseURL = defaultOpenRouterBaseURL
+	}
 	return cfg
 }
 
@@ -70,4 +100,75 @@ func cleanPath(path string) string {
 		return filepath.Clean(abs)
 	}
 	return filepath.Clean(path)
+}
+
+func loadEnvFiles() {
+	if os.Getenv("JAZMEM_DISABLE_DOTENV") == "1" {
+		return
+	}
+	for _, path := range envCandidates() {
+		loadEnvFile(path)
+	}
+}
+
+func envCandidates() []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(path string) {
+		path = cleanPath(path)
+		if path == "" || seen[path] {
+			return
+		}
+		seen[path] = true
+		out = append(out, path)
+	}
+	if explicit := strings.TrimSpace(os.Getenv("JAZMEM_ENV")); explicit != "" {
+		add(explicit)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return out
+	}
+	dir := cwd
+	for i := 0; i < 6; i++ {
+		add(filepath.Join(dir, ".env"))
+		add(filepath.Join(dir, "backend", ".env"))
+		add(filepath.Join(dir, "jaz", "backend", ".env"))
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return out
+}
+
+func loadEnvFile(path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key == "" || os.Getenv(key) != "" {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		value = strings.Trim(value, `"'`)
+		_ = os.Setenv(key, value)
+	}
 }

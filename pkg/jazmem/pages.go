@@ -42,10 +42,13 @@ func (m *Memory) Dream(ctx context.Context, opts DreamOptions) (DreamReport, err
 	}
 	return DreamReport{
 		RunSlug:     report.RunSlug,
+		ReviewSlug:  report.ReviewSlug,
 		InputSlugs:  report.InputSlugs,
 		Promoted:    report.Promoted,
 		ReviewItems: report.ReviewItems,
 		Skipped:     report.Skipped,
+		ModelUsed:   report.ModelUsed,
+		Warnings:    report.Warnings,
 	}, nil
 }
 

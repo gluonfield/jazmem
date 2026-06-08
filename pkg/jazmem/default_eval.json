@@ -1,0 +1,50 @@
+[
+  {
+    "query": "what connects Majid and Leeroo",
+    "expected_slugs": ["people/majid-yazdani", "companies/leeroo"]
+  },
+  {
+    "query": "who are Majid's friends",
+    "expected_slugs": ["people/augustinas-malinauskas"]
+  },
+  {
+    "query": "who works with Majid",
+    "expected_slugs": ["companies/leeroo", "companies/uniforce"]
+  },
+  {
+    "query": "Leeroo deployment collaboration",
+    "expected_slugs": ["companies/leeroo", "people/majid-yazdani", "projects/ink"]
+  },
+  {
+    "query": "Ink enterprise deployment strategy Claude private internal app",
+    "expected_slugs": ["concepts/ink-enterprise-deployment-strategy", "projects/ink"]
+  },
+  {
+    "query": "Oxford Edge Irwin Zaid",
+    "expected_slugs": ["people/irwin-zaid", "companies/oxford-edge"]
+  },
+  {
+    "query": "Oxford AI robotics opportunity desk",
+    "expected_slugs": ["concepts/oxford-ai-robotics-opportunity-desk", "projects/oxford-opportunity-workstream"]
+  },
+  {
+    "query": "physics reasoning environment Aravinth Dennis",
+    "expected_slugs": ["concepts/physics-reasoning-environment", "people/aravinth-kulanthaivelu", "people/dennis"]
+  },
+  {
+    "query": "high trust founder meetings introductions",
+    "expected_slugs": ["concepts/high-trust-founder-meetings"]
+  },
+  {
+    "query": "Augustinas technical stack Go Temporal Hetzner k3s",
+    "expected_slugs": ["concepts/augustinas-technical-stack"]
+  },
+  {
+    "query": "Eternis AI former operator founder advisor",
+    "expected_slugs": ["companies/eternis-ai", "people/augustinas-malinauskas"]
+  },
+  {
+    "query": "who is Director of Oxford Edge",
+    "expected_slugs": ["people/irwin-zaid", "companies/oxford-edge"]
+  }
+]

@@ -65,6 +65,8 @@ func run(args []string) error {
 		return runDream(args[1:])
 	case "link-hygiene":
 		return runLinkHygiene(args[1:])
+	case "eval":
+		return runEval(args[1:])
 	case "doctor":
 		return runDoctor(args[1:])
 	default:
@@ -362,6 +364,43 @@ func runLinkHygiene(args []string) error {
 	return printJSON(report)
 }
 
+func runEval(args []string) error {
+	fs := flag.NewFlagSet("eval", flag.ContinueOnError)
+	root := fs.String("root", "", rootHelp)
+	path := fs.String("path", "", "alias for --root")
+	db := fs.String("db", "", dbHelp)
+	file := fs.String("file", "", "eval JSON file; defaults to embedded jazmem eval set")
+	limit := fs.Int("limit", 5, "retrieval limit per eval case")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	selectedRoot, err := resolveRootArg(*root, *path, nil)
+	if err != nil {
+		return err
+	}
+	var cases []jazmem.EvalCase
+	if strings.TrimSpace(*file) != "" {
+		data, err := os.ReadFile(*file)
+		if err != nil {
+			return err
+		}
+		cases, err = jazmem.ParseEvalCases(data)
+		if err != nil {
+			return err
+		}
+	}
+	m, err := jazmem.Open(jazmem.Config{Root: selectedRoot, DBPath: *db})
+	if err != nil {
+		return err
+	}
+	defer m.Close()
+	report, err := m.Evaluate(context.Background(), jazmem.EvalOptions{Cases: cases, Limit: *limit})
+	if err != nil {
+		return err
+	}
+	return printJSON(report)
+}
+
 func parseCommon(name string, args []string) (jazmem.Config, []string, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	root := fs.String("root", "", rootHelp)
@@ -387,7 +426,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: jazmem [--root path] [--db path] <query>")
 	fmt.Fprintln(w, "       jazmem [--agentic] [--text] [--limit n] <query>")
 	fmt.Fprintln(w, "       jazmem init [--root path|--path path|path] [--db path]")
-	fmt.Fprintln(w, "       jazmem <index|search|get|page|file|checkpoint|dream|link-hygiene|doctor> [--root path] [--db path]")
+	fmt.Fprintln(w, "       jazmem <index|search|get|page|file|checkpoint|dream|link-hygiene|eval|doctor> [--root path] [--db path]")
 }
 
 func resolveRootArg(root, path string, positional []string) (string, error) {

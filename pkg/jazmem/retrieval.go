@@ -2,9 +2,12 @@ package jazmem
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/wins/jazmem/internal/llm"
 	"github.com/wins/jazmem/internal/search"
 	sqlitestore "github.com/wins/jazmem/internal/store/sqlite"
 )
@@ -26,7 +29,7 @@ func (m *Memory) AgenticSearch(ctx context.Context, query string, opts AgenticOp
 	if err != nil {
 		return AgenticResponse{}, err
 	}
-	return buildAgenticResponse(response), nil
+	return m.synthesizeAgentic(ctx, query, response)
 }
 
 func (m *Memory) retrieve(ctx context.Context, query string, rawLimit int) (SearchResponse, error) {
@@ -115,56 +118,144 @@ func mergeChunkResults(rows []sqlitestore.SearchResult, limit int) []Result {
 	return results
 }
 
-func buildAgenticResponse(response SearchResponse) AgenticResponse {
-	answer, citations := synthesizeExtractiveAnswer(response.Results)
-	gaps := []string(nil)
-	if len(response.Results) == 0 {
-		gaps = append(gaps, "No matching markdown pages were found in jazmem.")
+func (m *Memory) synthesizeAgentic(ctx context.Context, query string, response SearchResponse) (AgenticResponse, error) {
+	evidence, byID := agenticEvidence(response.Results)
+	if len(evidence) == 0 {
+		return AgenticResponse{
+			Answer:      "No matching memory was found.",
+			Gaps:        []string{"No matching markdown pages were found in jazmem."},
+			Stats:       response.Stats,
+			Rounds:      0,
+			SynthesisOK: false,
+			Diagnostics: agenticDiagnostics(response),
+		}, nil
+	}
+	llmResp, err := m.llm.CompleteJSON(ctx, llm.Request{
+		MaxTokens: 2200,
+		Messages: []llm.Message{
+			{Role: "system", Content: agenticSystemPrompt()},
+			{Role: "user", Content: agenticUserPrompt(query, evidence)},
+		},
+	})
+	if err != nil {
+		return AgenticResponse{}, err
+	}
+	var parsed struct {
+		Answer      string   `json:"answer"`
+		CitationIDs []int    `json:"citation_ids"`
+		Gaps        []string `json:"gaps"`
+		Warnings    []string `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(llmResp.Content), &parsed); err != nil {
+		return AgenticResponse{}, fmt.Errorf("decode agentic OpenRouter JSON: %w", err)
+	}
+	parsed.Answer = strings.TrimSpace(parsed.Answer)
+	if parsed.Answer == "" {
+		return AgenticResponse{}, fmt.Errorf("agentic OpenRouter response missing answer")
+	}
+	citations, citationWarnings := citationsFromIDs(parsed.CitationIDs, byID)
+	warnings := append([]string{}, parsed.Warnings...)
+	warnings = append(warnings, citationWarnings...)
+	if len(citations) == 0 {
+		warnings = append(warnings, "LLM returned no valid citation ids; answer should be treated as ungrounded.")
 	}
 	return AgenticResponse{
-		Answer:    answer,
-		Citations: citations,
-		Gaps:      gaps,
-		Stats:     response.Stats,
-	}
+		Answer:      parsed.Answer,
+		Citations:   citations,
+		Gaps:        cleanStringSlice(parsed.Gaps),
+		Stats:       response.Stats,
+		Warnings:    cleanStringSlice(warnings),
+		ModelUsed:   llmResp.Model,
+		Rounds:      1,
+		SynthesisOK: len(citations) > 0,
+		Diagnostics: agenticDiagnostics(response),
+	}, nil
 }
 
-func synthesizeExtractiveAnswer(results []Result) (string, []Citation) {
-	if len(results) == 0 {
-		return "No matching memory was found.", nil
-	}
+func agenticSystemPrompt() string {
+	return strings.TrimSpace(`You are jazmem's memory answerer.
+
+Answer only from the supplied evidence. Do not use outside knowledge.
+If the evidence is insufficient, say what is known and put missing information in gaps.
+Ground every substantive claim in citation_ids that refer to supplied evidence ids.
+Return strict JSON only:
+{
+  "answer": "concise prose answer",
+  "citation_ids": [1, 2],
+  "gaps": ["important missing information"],
+  "warnings": ["optional retrieval or evidence warnings"]
+}`)
+}
+
+func agenticUserPrompt(query string, evidence []agenticEvidenceItem) string {
 	var b strings.Builder
-	b.WriteString("Most relevant memory:\n")
-	citations := make([]Citation, 0)
-	seenCitations := map[string]bool{}
+	fmt.Fprintf(&b, "Question: %s\n\nEvidence:\n", strings.TrimSpace(query))
+	for _, item := range evidence {
+		fmt.Fprintf(&b, "\n[%d] slug=%s title=%s chunk=%d score=%.8f\n%s\n", item.ID, item.Citation.Slug, item.Citation.Title, item.Citation.Chunk, item.Score, item.Snippet)
+	}
+	return b.String()
+}
+
+type agenticEvidenceItem struct {
+	ID       int
+	Citation Citation
+	Snippet  string
+	Score    float64
+}
+
+func agenticEvidence(results []Result) ([]agenticEvidenceItem, map[int]Citation) {
+	var evidence []agenticEvidenceItem
+	byID := map[int]Citation{}
+	id := 1
 	for _, result := range results {
-		wrotePage := false
 		for _, match := range result.Matches {
 			snippet := compactSnippet(match.Snippet)
 			if snippet == "" {
 				continue
 			}
-			if !wrotePage {
-				fmt.Fprintf(&b, "\n%s (%s):\n", result.Title, result.Slug)
-				wrotePage = true
-			}
-			ref := fmt.Sprintf("[Source: [[%s]], chunk %d]", result.Slug, match.Chunk)
-			fmt.Fprintf(&b, "- %s %s\n", snippet, ref)
-			key := result.Slug + "\x00" + string(rune(match.Chunk))
-			if !seenCitations[key] {
-				seenCitations[key] = true
-				citations = append(citations, Citation{
-					Slug:  result.Slug,
-					Title: result.Title,
-					Chunk: match.Chunk,
-				})
+			citation := Citation{Slug: result.Slug, Title: result.Title, Chunk: match.Chunk}
+			evidence = append(evidence, agenticEvidenceItem{
+				ID:       id,
+				Citation: citation,
+				Snippet:  snippet,
+				Score:    match.Score,
+			})
+			byID[id] = citation
+			id++
+			if len(evidence) >= 20 {
+				return evidence, byID
 			}
 		}
 	}
-	if len(citations) == 0 {
-		return "Matching pages were found, but no usable snippets were available.", nil
+	return evidence, byID
+}
+
+func citationsFromIDs(ids []int, byID map[int]Citation) ([]Citation, []string) {
+	var citations []Citation
+	var warnings []string
+	seen := map[string]bool{}
+	for _, id := range ids {
+		citation, ok := byID[id]
+		if !ok {
+			warnings = append(warnings, "LLM returned invalid citation id "+strconv.Itoa(id)+".")
+			continue
+		}
+		key := citation.Slug + "\x00" + strconv.Itoa(citation.Chunk)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		citations = append(citations, citation)
 	}
-	return strings.TrimSpace(b.String()), citations
+	return citations, warnings
+}
+
+func agenticDiagnostics(response SearchResponse) map[string]int {
+	return map[string]int{
+		"pages_gathered":  response.Stats.Pages,
+		"chunks_gathered": response.Stats.Chunks,
+		"graph_hits":      response.Stats.GraphHits,
+	}
 }
 
 func compactSnippet(snippet string) string {
@@ -222,4 +313,15 @@ func normalizeSearchLimit(limit int) int {
 		return 50
 	}
 	return limit
+}
+
+func cleanStringSlice(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }

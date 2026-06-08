@@ -2,8 +2,11 @@ package jazmem
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,13 +17,18 @@ func TestRawMarkdownReindexSearchAndDream(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
 	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
-	mem, err := Open(Config{Root: root, DBPath: dbPath, Now: func() time.Time { return now }})
+	llm := fakeOpenRouter(t, `{"summary":"Promoted durable jazmem search note.","promotions":[{"target_slug":"notes/jazmem-search","section":"Current","bullet":"- Alice and Riley are testing jazmem search. [Source: [[inbox/alice-riley-note]], 2026-06-08]","confidence":"high","source_slugs":["inbox/alice-riley-note"]}],"review":[],"skipped":[]}`)
+	defer llm.Close()
+	mem, err := Open(Config{Root: root, DBPath: dbPath, Now: func() time.Time { return now }, OpenRouterAPIKey: "test-key", OpenRouterBaseURL: llm.URL, OpenRouterModel: "test-model"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer mem.Close()
 
 	if err := mem.fs.WritePage("inbox/alice-riley-note", "---\ntitle: Alice Riley note\ntype: inbox\n---\n\n# Alice Riley note\n\nAlice and Riley are friends. They are working on jazmem search.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.fs.WritePage("notes/jazmem-search", "---\ntitle: Jazmem Search\n---\n\n# Jazmem Search\n"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := mem.Reindex(context.Background(), ReindexOptions{}); err != nil {
@@ -31,15 +39,24 @@ func TestRawMarkdownReindexSearchAndDream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) == 0 || results[0].Slug != "inbox/alice-riley-note" {
+	if len(results) == 0 {
 		t.Fatalf("unexpected search results %#v", results)
+	}
+	foundInbox := false
+	for _, result := range results {
+		if result.Slug == "inbox/alice-riley-note" {
+			foundInbox = true
+		}
+	}
+	if !foundInbox {
+		t.Fatalf("inbox note missing from search results %#v", results)
 	}
 
 	report, err := mem.Dream(context.Background(), DreamOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.RunSlug != "dreams/runs/2026-06-08" || len(report.InputSlugs) == 0 {
+	if report.RunSlug != "dreams/runs/2026-06-08" || len(report.InputSlugs) == 0 || report.Promoted != 1 || report.ModelUsed != "test-model" {
 		t.Fatalf("unexpected dream report %#v", report)
 	}
 	if _, err := mem.GetPage(context.Background(), report.RunSlug); err != nil {
@@ -264,10 +281,46 @@ func TestSearchMaxPoolsChunksBeforePageLimit(t *testing.T) {
 	}
 }
 
-func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
+func TestEvaluateScoresExpectedSlugs(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
 	mem, err := Open(Config{Root: root, DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mem.Close()
+
+	if err := mem.fs.WritePage("projects/ink", "---\ntitle: Ink\n---\n\n# Ink\n\nInk supports enterprise deployment.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.fs.WritePage("companies/leeroo", "---\ntitle: Leeroo\n---\n\n# Leeroo\n\nLeeroo deployment uses Ink.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.Reindex(context.Background(), ReindexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := mem.Evaluate(context.Background(), EvalOptions{
+		Limit: 2,
+		Cases: []EvalCase{
+			{Query: "Leeroo deployment", ExpectedSlugs: []string{"companies/leeroo"}},
+			{Query: "Ink enterprise deployment", ExpectedSlugs: []string{"projects/ink"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.CaseCount != 2 || report.HitRate != 1 {
+		t.Fatalf("unexpected eval report %#v", report)
+	}
+}
+
+func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	llm := fakeOpenRouter(t, `{"answer":"Leeroo is connected to Ink in the opportunity corpus.","citation_ids":[1],"gaps":[],"warnings":[]}`)
+	defer llm.Close()
+	mem, err := Open(Config{Root: root, DBPath: dbPath, OpenRouterAPIKey: "test-key", OpenRouterBaseURL: llm.URL, OpenRouterModel: "test-model"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,6 +346,35 @@ func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
 	if response.Citations[0].Slug != "companies/leeroo" || response.Citations[0].Chunk != 0 {
 		t.Fatalf("unexpected citations %#v", response.Citations)
 	}
+	if response.ModelUsed != "test-model" || !response.SynthesisOK || response.Rounds != 1 {
+		t.Fatalf("unexpected synthesis metadata %#v", response)
+	}
+}
+
+func fakeOpenRouter(t *testing.T, content string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected OpenRouter path %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			t.Fatalf("missing authorization header")
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["model"] != "test-model" {
+			t.Fatalf("model = %#v", payload["model"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"model": "test-model",
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": content}},
+			},
+		})
+	}))
 }
 
 func TestLinkHygieneWritesRelationshipReview(t *testing.T) {

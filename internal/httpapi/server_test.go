@@ -14,9 +14,14 @@ import (
 )
 
 func TestSearchEndpoint(t *testing.T) {
+	llm := fakeOpenRouter(t, `{"answer":"jazmem search is being tested by Alice and Riley.","citation_ids":[1],"gaps":[],"warnings":[]}`)
+	defer llm.Close()
 	mem, err := jazmem.Open(jazmem.Config{
-		Root:   t.TempDir(),
-		DBPath: filepath.Join(t.TempDir(), "index.sqlite"),
+		Root:              t.TempDir(),
+		DBPath:            filepath.Join(t.TempDir(), "index.sqlite"),
+		OpenRouterAPIKey:  "test-key",
+		OpenRouterBaseURL: llm.URL,
+		OpenRouterModel:   "test-model",
 		Now: func() time.Time {
 			return time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
 		},
@@ -65,6 +70,25 @@ func TestSearchEndpoint(t *testing.T) {
 	if !strings.Contains(agentic.Answer, "jazmem") || len(agentic.Citations) == 0 || agentic.Citations[0].Slug != "inbox/search-note" {
 		t.Fatalf("unexpected agentic payload %#v", agentic)
 	}
+}
+
+func fakeOpenRouter(t *testing.T, content string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected OpenRouter path %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			t.Fatalf("missing authorization header")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"model": "test-model",
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": content}},
+			},
+		})
+	}))
 }
 
 func TestFileEndpointSuggestsSimilarSlugs(t *testing.T) {
