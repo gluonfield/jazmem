@@ -205,16 +205,9 @@ Example MCP client config:
 Tools:
 
 - `jazmem_search`: deterministic raw retrieval with `query` and optional `limit`.
-- `jazmem_answer`: OpenRouter-backed answer synthesis from retrieved evidence.
-- `jazmem_get_page`: read a page by slug, including raw markdown.
-- `jazmem_file`: resolve a slug to its markdown file path for direct editing.
-- `jazmem_index`: rebuild SQLite from markdown after edits.
-- `jazmem_doctor`: inspect root, db, and index counts.
-- `jazmem_dream`: run dream consolidation.
-- `jazmem_link_hygiene`: generate relationship/link proposals.
-- `jazmem_checkpoint`: commit verified markdown memory progress.
+- `jazmem_get`: read a page by slug. The primary MCP text content is the raw markdown; structured output also includes slug, title, path, and not-found suggestions.
 
-There is no MCP write/capture tool. Agents store memory by editing markdown files, then calling `jazmem_index`.
+MCP is intentionally read-only. There is no MCP write/capture/index/dream/checkpoint tool. Agents store memory by editing markdown files. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations.
 
 ## Store Data
 

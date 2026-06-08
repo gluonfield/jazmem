@@ -38,20 +38,8 @@ func TestServerTools(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names[tool.Name] = true
 	}
-	for _, name := range []string{
-		"jazmem_search",
-		"jazmem_answer",
-		"jazmem_get_page",
-		"jazmem_file",
-		"jazmem_index",
-		"jazmem_doctor",
-		"jazmem_dream",
-		"jazmem_link_hygiene",
-		"jazmem_checkpoint",
-	} {
-		if !names[name] {
-			t.Fatalf("tool %s was not registered; got %#v", name, names)
-		}
+	if len(names) != 2 || !names["jazmem_search"] || !names["jazmem_get"] {
+		t.Fatalf("unexpected registered tools %#v", names)
 	}
 
 	searchCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
@@ -69,49 +57,39 @@ func TestServerTools(t *testing.T) {
 		t.Fatalf("unexpected search response %#v", search)
 	}
 
-	fileCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "jazmem_file",
-		Arguments: map[string]any{"slug": "people/alice-bentick"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	file := decodeStructured[FileOutput](t, fileCall)
-	if !file.Found || file.Path == "" || file.Slug != "people/alice-bentick" {
-		t.Fatalf("unexpected file response %#v", file)
-	}
-
 	pageCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "jazmem_get_page",
+		Name:      "jazmem_get",
 		Arguments: map[string]any{"slug": "people/alice-bentick"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	page := decodeStructured[PageOutput](t, pageCall)
-	if !page.Found || page.Page == nil || !strings.Contains(page.Page.Raw, "Alice works on jazmem") {
+	if !page.Found || page.Path == "" || page.Slug != "people/alice-bentick" || !strings.Contains(page.Raw, "Alice works on jazmem") {
 		t.Fatalf("unexpected page response %#v", page)
+	}
+	if len(pageCall.Content) == 0 {
+		t.Fatal("expected raw markdown text content")
+	}
+	text, ok := pageCall.Content[0].(*mcp.TextContent)
+	if !ok || !strings.Contains(text.Text, "Alice works on jazmem") {
+		t.Fatalf("unexpected text content %#v", pageCall.Content)
 	}
 
 	missingCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "jazmem_file",
+		Name:      "jazmem_get",
 		Arguments: map[string]any{"slug": "people/alice"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	missing := decodeStructured[FileOutput](t, missingCall)
+	missing := decodeStructured[PageOutput](t, missingCall)
 	if missing.Found || missing.Error != "not found: people/alice" || len(missing.Suggestions) == 0 || missing.Suggestions[0].Slug != "people/alice-bentick" {
 		t.Fatalf("unexpected missing response %#v", missing)
 	}
-
-	doctorCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "jazmem_doctor"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	doctor := decodeStructured[jazmem.DoctorReport](t, doctorCall)
-	if doctor.PageCount != 1 || doctor.ChunkCount == 0 {
-		t.Fatalf("unexpected doctor response %#v", doctor)
+	missingText, ok := missingCall.Content[0].(*mcp.TextContent)
+	if !ok || !strings.Contains(missingText.Text, "not found: people/alice") || !strings.Contains(missingText.Text, "people/alice-bentick") {
+		t.Fatalf("unexpected missing text content %#v", missingCall.Content)
 	}
 }
 

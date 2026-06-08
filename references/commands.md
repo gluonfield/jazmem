@@ -214,13 +214,6 @@ MCP client config:
 Tools:
 
 - `jazmem_search`: input `{ "query": "...", "limit": 5 }`; output `SearchResponse`.
-- `jazmem_answer`: input `{ "query": "..." }`; output `AgenticResponse`; requires `OPENROUTER_API_KEY`.
-- `jazmem_get_page`: input `{ "slug": "people/alice" }`; output `{ "found": true, "page": ... }` or `{ "found": false, "error": "not found: people/alice", "suggestions": [...] }`.
-- `jazmem_file`: input `{ "slug": "people/alice" }`; output file path payload or not-found suggestions.
-- `jazmem_index`: input `{}`; output reindex report.
-- `jazmem_doctor`: input `{}`; output doctor report.
-- `jazmem_dream`: input `{ "date": "2026-06-08" }` or `{}`; output dream report.
-- `jazmem_link_hygiene`: input `{}`; output link hygiene report.
-- `jazmem_checkpoint`: input `{ "message": "updated alice preferences" }`; output checkpoint report.
+- `jazmem_get`: input `{ "slug": "people/alice" }`; primary text content is raw markdown. Structured output is `{ "found": true, "slug": "...", "path": "...", "title": "...", "raw": "..." }` or `{ "found": false, "error": "not found: people/alice", "suggestions": [...] }`.
 
-MCP still follows the markdown source-of-truth rule. There is no write/capture tool. To store data, use `jazmem_file` or `jazmem_get_page`, edit markdown directly, then call `jazmem_index` and verify with `jazmem_search`.
+MCP is read-only. There is no MCP write/capture/index/dream/checkpoint tool. To store data, edit markdown directly. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations.

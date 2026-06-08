@@ -98,17 +98,12 @@ Search strategy:
 
 For response schemas, server endpoints, eval, and maintenance commands, read [references/commands.md](references/commands.md).
 
-When MCP tools are available, prefer them over shell commands for retrieval and maintenance:
+When MCP tools are available, prefer them over shell commands for read-only retrieval:
 
 - `jazmem_search`
-- `jazmem_answer`
-- `jazmem_get_page`
-- `jazmem_file`
-- `jazmem_index`
-- `jazmem_doctor`
-- `jazmem_dream`
-- `jazmem_link_hygiene`
-- `jazmem_checkpoint`
+- `jazmem_get`
+
+MCP is read-only. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations, not MCP tools.
 
 ## Read Memory
 
