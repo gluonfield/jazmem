@@ -98,6 +98,18 @@ Search strategy:
 
 For response schemas, server endpoints, eval, and maintenance commands, read [references/commands.md](references/commands.md).
 
+When MCP tools are available, prefer them over shell commands for retrieval and maintenance:
+
+- `jazmem_search`
+- `jazmem_answer`
+- `jazmem_get_page`
+- `jazmem_file`
+- `jazmem_index`
+- `jazmem_doctor`
+- `jazmem_dream`
+- `jazmem_link_hygiene`
+- `jazmem_checkpoint`
+
 ## Read Memory
 
 ```bash

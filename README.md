@@ -58,8 +58,7 @@ From the local repo:
 ```bash
 cd /Users/wins/Projects/personal/jarvis/jazmem
 go test ./...
-go build -o ~/.local/bin/jazmem ./cmd/jazmem
-go build -o ~/.local/bin/jazmem-server ./cmd/jazmem-server
+GOBIN=/Users/wins/.local/bin go install ./cmd/jazmem ./cmd/jazmem-server ./cmd/jazmem-mcp
 ```
 
 `/Users/wins/.local/bin` must be in `PATH`.
@@ -68,6 +67,7 @@ Verify:
 
 ```bash
 which jazmem
+which jazmem-mcp
 jazmem doctor
 ```
 
@@ -75,7 +75,11 @@ Install the jazmem skill for jaz agents:
 
 ```bash
 mkdir -p ~/.jaz/skills/jazmem
-cp /Users/wins/Projects/personal/jarvis/jazmem/SKILL.md ~/.jaz/skills/jazmem/SKILL.md
+rsync -a --delete \
+  /Users/wins/Projects/personal/jarvis/jazmem/SKILL.md \
+  /Users/wins/Projects/personal/jarvis/jazmem/references \
+  /Users/wins/Projects/personal/jarvis/jazmem/agents \
+  ~/.jaz/skills/jazmem/
 ```
 
 ## Initialize Memory
@@ -175,6 +179,42 @@ curl -X POST 'http://127.0.0.1:9477/link-hygiene'
 ```
 
 There is no capture endpoint. Store data by editing markdown files.
+
+## MCP Server
+
+Run the stdio MCP server:
+
+```bash
+jazmem-mcp
+jazmem-mcp --root ~/.jaz/memory --db ~/.jaz/jazmem.sqlite
+```
+
+Example MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "jazmem": {
+      "command": "/Users/wins/.local/bin/jazmem-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Tools:
+
+- `jazmem_search`: deterministic raw retrieval with `query` and optional `limit`.
+- `jazmem_answer`: OpenRouter-backed answer synthesis from retrieved evidence.
+- `jazmem_get_page`: read a page by slug, including raw markdown.
+- `jazmem_file`: resolve a slug to its markdown file path for direct editing.
+- `jazmem_index`: rebuild SQLite from markdown after edits.
+- `jazmem_doctor`: inspect root, db, and index counts.
+- `jazmem_dream`: run dream consolidation.
+- `jazmem_link_hygiene`: generate relationship/link proposals.
+- `jazmem_checkpoint`: commit verified markdown memory progress.
+
+There is no MCP write/capture tool. Agents store memory by editing markdown files, then calling `jazmem_index`.
 
 ## Store Data
 

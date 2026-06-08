@@ -1,0 +1,159 @@
+package mcpapi
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/wins/jazmem/pkg/jazmem"
+)
+
+func TestServerTools(t *testing.T) {
+	mem := testMemory(t)
+	defer mem.Close()
+
+	if err := os.WriteFile(
+		filepath.Join(mem.Root(), "people", "alice-bentick.md"),
+		[]byte("---\ntitle: Alice Bentick\naliases: [Alice]\n---\n\n# Alice Bentick\n\nAlice works on jazmem MCP testing.\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.Reindex(context.Background(), jazmem.ReindexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	session := connectClient(t, New(mem))
+	defer session.Close()
+
+	tools, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, tool := range tools.Tools {
+		names[tool.Name] = true
+	}
+	for _, name := range []string{
+		"jazmem_search",
+		"jazmem_answer",
+		"jazmem_get_page",
+		"jazmem_file",
+		"jazmem_index",
+		"jazmem_doctor",
+		"jazmem_dream",
+		"jazmem_link_hygiene",
+		"jazmem_checkpoint",
+	} {
+		if !names[name] {
+			t.Fatalf("tool %s was not registered; got %#v", name, names)
+		}
+	}
+
+	searchCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "jazmem_search",
+		Arguments: map[string]any{"query": "Alice jazmem MCP", "limit": 5},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searchCall.IsError {
+		t.Fatalf("search tool error: %#v", searchCall.Content)
+	}
+	search := decodeStructured[jazmem.SearchResponse](t, searchCall)
+	if len(search.Results) == 0 || search.Results[0].Slug != "people/alice-bentick" {
+		t.Fatalf("unexpected search response %#v", search)
+	}
+
+	fileCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "jazmem_file",
+		Arguments: map[string]any{"slug": "people/alice-bentick"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := decodeStructured[FileOutput](t, fileCall)
+	if !file.Found || file.Path == "" || file.Slug != "people/alice-bentick" {
+		t.Fatalf("unexpected file response %#v", file)
+	}
+
+	pageCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "jazmem_get_page",
+		Arguments: map[string]any{"slug": "people/alice-bentick"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := decodeStructured[PageOutput](t, pageCall)
+	if !page.Found || page.Page == nil || !strings.Contains(page.Page.Raw, "Alice works on jazmem") {
+		t.Fatalf("unexpected page response %#v", page)
+	}
+
+	missingCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "jazmem_file",
+		Arguments: map[string]any{"slug": "people/alice"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := decodeStructured[FileOutput](t, missingCall)
+	if missing.Found || missing.Error != "not found: people/alice" || len(missing.Suggestions) == 0 || missing.Suggestions[0].Slug != "people/alice-bentick" {
+		t.Fatalf("unexpected missing response %#v", missing)
+	}
+
+	doctorCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "jazmem_doctor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doctor := decodeStructured[jazmem.DoctorReport](t, doctorCall)
+	if doctor.PageCount != 1 || doctor.ChunkCount == 0 {
+		t.Fatalf("unexpected doctor response %#v", doctor)
+	}
+}
+
+func testMemory(t *testing.T) *jazmem.Memory {
+	t.Helper()
+	mem, err := jazmem.Open(jazmem.Config{
+		Root:   t.TempDir(),
+		DBPath: filepath.Join(t.TempDir(), "index.sqlite"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mem
+}
+
+func connectClient(t *testing.T, server *mcp.Server) *mcp.ClientSession {
+	t.Helper()
+	ctx := context.Background()
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "jazmem-test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return clientSession
+}
+
+func decodeStructured[T any](t *testing.T, result *mcp.CallToolResult) T {
+	t.Helper()
+	var out T
+	data, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("decode structured content: %v\n%s", err, string(data))
+	}
+	return out
+}
