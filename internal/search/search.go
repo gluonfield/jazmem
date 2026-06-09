@@ -138,21 +138,11 @@ func normalizeLimit(limit int) int {
 	if limit <= 0 {
 		return 10
 	}
-	if limit > 50 {
-		return 50
-	}
-	return limit
+	return min(limit, 50)
 }
 
 func chunkCandidateLimit(pageLimit int) int {
-	limit := pageLimit * 4
-	if limit < 10 {
-		limit = 10
-	}
-	if limit > 50 {
-		limit = 50
-	}
-	return limit
+	return min(max(pageLimit*4, 10), 50)
 }
 
 type relationalQuery struct {

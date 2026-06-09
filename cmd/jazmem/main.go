@@ -104,7 +104,7 @@ func runIndex(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	report, err := m.Reindex(context.Background(), jazmem.ReindexOptions{})
 	if err != nil {
 		return err
@@ -127,7 +127,7 @@ func runSearch(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	if agentic {
 		result, err := m.AgenticSearch(context.Background(), query, jazmem.AgenticOptions{Limit: limit})
 		if err != nil {
@@ -257,7 +257,7 @@ func runGet(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	page, err := m.GetPage(context.Background(), rest[0])
 	if err != nil {
 		return err
@@ -285,7 +285,7 @@ func runFile(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	page, err := m.GetPage(context.Background(), rest[0])
 	if err != nil {
 		return err
@@ -303,7 +303,7 @@ func runDream(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	report, err := m.Dream(context.Background(), jazmem.DreamOptions{})
 	if err != nil {
 		return err
@@ -320,7 +320,7 @@ func runDoctor(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	report, err := m.Doctor(context.Background())
 	if err != nil {
 		return err
@@ -337,7 +337,7 @@ func runLinkHygiene(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	report, err := m.LinkHygiene(context.Background())
 	if err != nil {
 		return err
@@ -374,7 +374,7 @@ func runEval(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 	report, err := m.Evaluate(context.Background(), jazmem.EvalOptions{Cases: cases, Limit: *limit})
 	if err != nil {
 		return err
@@ -404,10 +404,10 @@ func printJSON(v any) error {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "usage: jazmem [--root path] [--db path] <query>")
-	fmt.Fprintln(w, "       jazmem [--agentic] [--text] [--limit n] <query>")
-	fmt.Fprintln(w, "       jazmem init [--root path|--path path|path] [--db path]")
-	fmt.Fprintln(w, "       jazmem <index|search|get|page|file|dream|link-hygiene|eval|doctor> [--root path] [--db path]")
+	_, _ = fmt.Fprintln(w, "usage: jazmem [--root path] [--db path] <query>")
+	_, _ = fmt.Fprintln(w, "       jazmem [--agentic] [--text] [--limit n] <query>")
+	_, _ = fmt.Fprintln(w, "       jazmem init [--root path|--path path|path] [--db path]")
+	_, _ = fmt.Fprintln(w, "       jazmem <index|search|get|page|file|dream|link-hygiene|eval|doctor> [--root path] [--db path]")
 }
 
 func resolveRootArg(root, path string, positional []string) (string, error) {

@@ -164,7 +164,7 @@ func discoverRelationships(pages []memfs.Page) []relationship {
 			continue
 		}
 		mentioned := mentionedEntities(body, entities)
-		for i := 0; i < len(mentioned); i++ {
+		for i := range len(mentioned) {
 			for j := i + 1; j < len(mentioned); j++ {
 				left, right := mentioned[i], mentioned[j]
 				key := left.Page.Slug + "\x00" + right.Page.Slug + "\x00" + label

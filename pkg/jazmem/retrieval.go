@@ -295,12 +295,12 @@ func stripMarkdownHeadings(snippet string) string {
 func trimLeadingListMarker(snippet string) string {
 	for {
 		trimmed := strings.TrimSpace(snippet)
-		if strings.HasPrefix(trimmed, "- ") {
-			snippet = strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+		if after, ok := strings.CutPrefix(trimmed, "- "); ok {
+			snippet = strings.TrimSpace(after)
 			continue
 		}
-		if strings.HasPrefix(trimmed, "* ") {
-			snippet = strings.TrimSpace(strings.TrimPrefix(trimmed, "* "))
+		if after, ok := strings.CutPrefix(trimmed, "* "); ok {
+			snippet = strings.TrimSpace(after)
 			continue
 		}
 		return trimmed

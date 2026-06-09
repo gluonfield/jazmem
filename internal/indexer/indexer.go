@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -130,9 +131,7 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 		}
 
 		chunks := SplitChunks(page)
-		for _, chunk := range chunks {
-			data.Chunks = append(data.Chunks, chunk)
-		}
+		data.Chunks = append(data.Chunks, chunks...)
 		report.ChunkCount += len(chunks)
 	}
 	sort.Slice(data.Aliases, func(a, b int) bool {
@@ -148,7 +147,7 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 func ExtractExplicitLinks(body string) []ExplicitLink {
 	var links []ExplicitLink
 	relationshipLevel := 0
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if level, heading := markdownHeading(line); level > 0 {
 			switch {
 			case heading == "relationships" || heading == "relations":
@@ -506,20 +505,10 @@ func mentionRegexp(alias string) *regexp.Regexp {
 }
 
 func contextAround(body string, start, end int) string {
-	if start < 0 {
-		start = 0
-	}
-	if end > len(body) {
-		end = len(body)
-	}
-	left := start - 90
-	if left < 0 {
-		left = 0
-	}
-	right := end + 90
-	if right > len(body) {
-		right = len(body)
-	}
+	start = max(start, 0)
+	end = min(end, len(body))
+	left := max(start-90, 0)
+	right := min(end+90, len(body))
 	context := strings.TrimSpace(body[left:right])
 	context = strings.Join(strings.Fields(context), " ")
 	if len(context) > 220 {
@@ -556,10 +545,8 @@ func sourceMarkerBefore(line string, offset int) bool {
 }
 
 func appendUnique(values []string, value string) []string {
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
+	if slices.Contains(values, value) {
+		return values
 	}
 	return append(values, value)
 }

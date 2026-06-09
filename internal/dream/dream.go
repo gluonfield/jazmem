@@ -411,8 +411,8 @@ func normalizeBullet(bullet string) string {
 	if bullet == "" {
 		return ""
 	}
-	if strings.HasPrefix(bullet, "* ") {
-		bullet = "- " + strings.TrimSpace(strings.TrimPrefix(bullet, "* "))
+	if after, ok := strings.CutPrefix(bullet, "* "); ok {
+		bullet = "- " + strings.TrimSpace(after)
 	}
 	return bullet
 }

@@ -31,7 +31,7 @@ func Init(ctx context.Context, cfg Config) (InitReport, error) {
 	if err != nil {
 		return InitReport{}, err
 	}
-	defer memory.Close()
+	defer func() { _ = memory.Close() }()
 	indexReport, err := memory.Reindex(ctx, ReindexOptions{})
 	if err != nil {
 		return InitReport{}, err

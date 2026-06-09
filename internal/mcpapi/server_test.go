@@ -22,7 +22,7 @@ func TestServerTools(t *testing.T) {
 		ProviderEndpoint: llm.URL,
 		Model:            "test-model",
 	})
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	if err := os.WriteFile(
 		filepath.Join(mem.Root(), "people", "alice-bentick.md"),
@@ -36,7 +36,7 @@ func TestServerTools(t *testing.T) {
 	}
 
 	session := connectClient(t, New(mem))
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	tools, err := session.ListTools(context.Background(), nil)
 	if err != nil {

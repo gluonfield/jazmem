@@ -163,7 +163,7 @@ func (s *Server) linkHygiene(w http.ResponseWriter, r *http.Request) {
 }
 
 func readJSON(r *http.Request, v any) error {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	return dec.Decode(v)

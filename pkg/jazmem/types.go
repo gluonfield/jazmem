@@ -93,7 +93,7 @@ type Report struct {
 }
 
 type DreamOptions struct {
-	Date time.Time `json:"date,omitempty"`
+	Date time.Time `json:"date,omitzero"`
 }
 
 type DreamReport struct {

@@ -23,7 +23,7 @@ func TestRawMarkdownReindexSearchAndDream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	if err := mem.fs.WritePage("inbox/alice-riley-note", "---\ntitle: Alice Riley note\ntype: inbox\n---\n\n# Alice Riley note\n\nAlice and Riley are friends. They are working on jazmem search.\n"); err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestReindexFindsExplicitAndMentionLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	write := func(slug, content string) {
 		t.Helper()
@@ -109,7 +109,7 @@ func TestSearchFallsBackToBroadTokenMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	if err := mem.fs.WritePage("projects/ink", "---\ntitle: Ink\n---\n\n# Ink\n\nInk supports enterprise Claude deployment.\n"); err != nil {
 		t.Fatal(err)
@@ -144,7 +144,7 @@ func TestSearchExpandsExplicitMemlinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	if err := mem.fs.WritePage("people/alice", "---\ntitle: Alice Smith\naliases: [Alice]\n---\n\n# Alice Smith\n\nAlice is friends with [[people/riley]].\n"); err != nil {
 		t.Fatal(err)
@@ -179,7 +179,7 @@ func TestTypedRelationshipsDriveRelationalSearch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	write := func(slug, content string) {
 		t.Helper()
@@ -251,11 +251,11 @@ func TestSearchMaxPoolsChunksBeforePageLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	var noisy strings.Builder
 	noisy.WriteString("---\ntitle: Noisy Needle\n---\n\n# Noisy Needle\n\n")
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		fmt.Fprintf(&noisy, "needle appears in noisy chunk %02d.\n\n", i)
 	}
 	if err := mem.fs.WritePage("projects/noisy-needle", noisy.String()); err != nil {
@@ -288,7 +288,7 @@ func TestEvaluateScoresExpectedSlugs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	if err := mem.fs.WritePage("projects/ink", "---\ntitle: Ink\n---\n\n# Ink\n\nInk supports enterprise deployment.\n"); err != nil {
 		t.Fatal(err)
@@ -324,7 +324,7 @@ func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	if err := mem.fs.WritePage("companies/leeroo", "---\ntitle: Leeroo\naliases: [Leeroo]\n---\n\n# Leeroo\n\nLeeroo is connected to [[projects/ink]] in the opportunity corpus.\n"); err != nil {
 		t.Fatal(err)
@@ -391,7 +391,7 @@ func TestLinkHygieneWritesRelationshipReview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	if err := mem.fs.WritePage("people/a", "---\ntitle: A\n---\n\n# A\n\nA and R are friends.\n"); err != nil {
 		t.Fatal(err)
@@ -440,7 +440,7 @@ func TestGetPageNotFoundSuggestsSimilarSlugs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	if err := mem.fs.WritePage("people/alice-bentick", "---\ntitle: Alice Bentick\naliases: [Alice]\n---\n\n# Alice Bentick\n"); err != nil {
 		t.Fatal(err)

@@ -30,7 +30,7 @@ func TestSearchEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	handler := New(mem)
 	path := filepath.Join(mem.Root(), "inbox", "search-note.md")
@@ -100,7 +100,7 @@ func TestFileEndpointSuggestsSimilarSlugs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 
 	path := filepath.Join(mem.Root(), "people", "alice-bentick.md")
 	if err := os.WriteFile(path, []byte("---\ntitle: Alice Bentick\naliases: [Alice]\n---\n\n# Alice Bentick\n"), 0o644); err != nil {
@@ -138,7 +138,7 @@ func TestMCPEndpointUsesServerMemory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mem.Close()
+	defer func() { _ = mem.Close() }()
 	if err := os.WriteFile(
 		filepath.Join(mem.Root(), "people", "alice-http-mcp.md"),
 		[]byte("---\ntitle: Alice HTTP MCP\naliases: [Alice]\n---\n\n# Alice HTTP MCP\n\nAlice works on jazmem HTTP MCP.\n"),
@@ -157,7 +157,7 @@ func TestMCPEndpointUsesServerMemory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	tools, err := session.ListTools(t.Context(), nil)
 	if err != nil {

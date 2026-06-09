@@ -100,7 +100,7 @@ func (c *Client) CompleteJSON(ctx context.Context, req Request) (Response, error
 	if err != nil {
 		return Response{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2_000_000))
 	if err != nil {
 		return Response{}, err

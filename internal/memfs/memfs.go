@@ -373,9 +373,9 @@ func uniqueStrings(values []string) []string {
 }
 
 func firstHeading(body string) string {
-	for _, line := range strings.Split(body, "\n") {
-		if strings.HasPrefix(line, "# ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "# "))
+	for line := range strings.SplitSeq(body, "\n") {
+		if after, ok := strings.CutPrefix(line, "# "); ok {
+			return strings.TrimSpace(after)
 		}
 	}
 	return ""

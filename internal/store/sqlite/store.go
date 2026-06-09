@@ -351,7 +351,7 @@ func (s *Store) LinkedPages(ctx context.Context, seeds []string, limit int) ([]S
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanSearchRows(rows)
 }
 
@@ -382,7 +382,7 @@ func (s *Store) ResolveEntity(ctx context.Context, text string) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var matches []string
 	for rows.Next() {
 		var match string
@@ -455,7 +455,7 @@ func (s *Store) RelationalFanout(ctx context.Context, seed string, linkTypes []s
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanSearchRows(rows)
 }
 
@@ -515,7 +515,7 @@ func (s *Store) RelationalBetween(ctx context.Context, left, right string, limit
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanSearchRows(rows)
 }
 
@@ -531,7 +531,7 @@ func (s *Store) searchFTS(ctx context.Context, match string, limit int) ([]Searc
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	results, err := scanSearchRows(rows)
 	if err != nil {
 		return nil, err
@@ -580,7 +580,7 @@ func (s *Store) searchTitleAliasTerm(ctx context.Context, term string, limit int
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanSearchRows(rows)
 }
 
@@ -597,7 +597,7 @@ func (s *Store) searchLike(ctx context.Context, query string, limit int) ([]Sear
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	results, err := scanSearchRows(rows)
 	if err != nil {
 		return nil, err
@@ -658,7 +658,7 @@ func insertPages(ctx context.Context, tx *sql.Tx, pages []PageRecord) error {
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 	for _, page := range pages {
 		fm, err := json.Marshal(page.Frontmatter)
 		if err != nil {
@@ -676,7 +676,7 @@ func insertAliases(ctx context.Context, tx *sql.Tx, aliases []AliasRecord) error
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 	for _, alias := range aliases {
 		if _, err := stmt.ExecContext(ctx, alias.Slug, alias.Alias, alias.NormalizedAlias); err != nil {
 			return err
@@ -690,7 +690,7 @@ func insertLinks(ctx context.Context, tx *sql.Tx, links []LinkRecord) error {
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 	for _, link := range links {
 		if link.FromSlug == "" || link.ToSlug == "" || link.FromSlug == link.ToSlug {
 			continue
@@ -707,7 +707,7 @@ func insertUnresolved(ctx context.Context, tx *sql.Tx, unresolved []UnresolvedLi
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 	for _, link := range unresolved {
 		if _, err := stmt.ExecContext(ctx, link.FromSlug, link.Target, link.Display, link.Reason, link.Context); err != nil {
 			return err
@@ -721,12 +721,12 @@ func insertChunks(ctx context.Context, tx *sql.Tx, chunks []ChunkRecord) error {
 	if err != nil {
 		return err
 	}
-	defer chunkStmt.Close()
+	defer func() { _ = chunkStmt.Close() }()
 	ftsStmt, err := tx.PrepareContext(ctx, `INSERT INTO chunks_fts(slug, chunk_index, title, body) VALUES(?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
-	defer ftsStmt.Close()
+	defer func() { _ = ftsStmt.Close() }()
 	for _, chunk := range chunks {
 		if _, err := chunkStmt.ExecContext(ctx, chunk.Slug, chunk.Index, chunk.Body, chunk.BodyHash, chunk.Embedding, millis(chunk.ModifiedAt)); err != nil {
 			return err

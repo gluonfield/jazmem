@@ -130,7 +130,7 @@ func envCandidates() []string {
 		return out
 	}
 	dir := cwd
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		add(filepath.Join(dir, ".env"))
 		add(filepath.Join(dir, "backend", ".env"))
 		add(filepath.Join(dir, "jaz", "backend", ".env"))
@@ -148,7 +148,7 @@ func loadEnvFile(path string) {
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -156,8 +156,8 @@ func loadEnvFile(path string) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if strings.HasPrefix(line, "export ") {
-			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		if after, ok := strings.CutPrefix(line, "export "); ok {
+			line = strings.TrimSpace(after)
 		}
 		key, value, ok := strings.Cut(line, "=")
 		if !ok {
