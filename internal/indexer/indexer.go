@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wins/jazmem/internal/memfs"
-	sqlitestore "github.com/wins/jazmem/internal/store/sqlite"
+	"github.com/gluonfield/jazmem/internal/memfs"
+	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
 )
 
 const extractorHash = "jazmem-indexer-v1"

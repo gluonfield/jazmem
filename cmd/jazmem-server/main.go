@@ -4,7 +4,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/wins/jazmem/internal/serverapp"
+	"github.com/gluonfield/jazmem/internal/serverapp"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 )

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	sqlitestore "github.com/wins/jazmem/internal/store/sqlite"
+	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
 )
 
 type Service struct {

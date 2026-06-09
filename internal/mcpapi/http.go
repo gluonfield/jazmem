@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gluonfield/jazmem/pkg/jazmem"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wins/jazmem/pkg/jazmem"
 )
 
 func NewHTTPHandler(memory *jazmem.Memory) http.Handler {

@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/wins/jazmem/internal/httpapi"
-	"github.com/wins/jazmem/pkg/jazmem"
+	"github.com/gluonfield/jazmem/internal/httpapi"
+	"github.com/gluonfield/jazmem/pkg/jazmem"
 	"go.uber.org/fx"
 )
 

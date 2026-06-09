@@ -1,4 +1,4 @@
-module github.com/wins/jazmem
+module github.com/gluonfield/jazmem
 
 go 1.26
 

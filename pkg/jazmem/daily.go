@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/wins/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/memfs"
 )
 
 func (m *Memory) dailyRollup(ctx context.Context) error {

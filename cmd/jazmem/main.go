@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wins/jazmem/pkg/jazmem"
+	"github.com/gluonfield/jazmem/pkg/jazmem"
 )
 
 func main() {

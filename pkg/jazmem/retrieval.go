@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wins/jazmem/internal/llm"
-	"github.com/wins/jazmem/internal/search"
-	sqlitestore "github.com/wins/jazmem/internal/store/sqlite"
+	"github.com/gluonfield/jazmem/internal/llm"
+	"github.com/gluonfield/jazmem/internal/search"
+	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
 )
 
 const agenticRetrievalLimit = 12

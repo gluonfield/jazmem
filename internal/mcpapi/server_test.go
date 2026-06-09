@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gluonfield/jazmem/pkg/jazmem"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wins/jazmem/pkg/jazmem"
 )
 
 func TestServerTools(t *testing.T) {

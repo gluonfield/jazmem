@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gluonfield/jazmem/pkg/jazmem"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wins/jazmem/pkg/jazmem"
 )
 
 const serverVersion = "0.1.0"

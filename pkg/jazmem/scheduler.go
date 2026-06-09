@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/wins/jazmem/internal/scheduler"
+	"github.com/gluonfield/jazmem/internal/scheduler"
 )
 
 func (m *Memory) StartScheduler(ctx context.Context) error {

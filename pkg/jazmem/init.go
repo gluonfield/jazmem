@@ -3,7 +3,7 @@ package jazmem
 import (
 	"context"
 
-	"github.com/wins/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/memfs"
 )
 
 type InitReport struct {

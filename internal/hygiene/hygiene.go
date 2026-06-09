@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wins/jazmem/internal/indexer"
-	"github.com/wins/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/indexer"
+	"github.com/gluonfield/jazmem/internal/memfs"
 )
 
 type Service struct {

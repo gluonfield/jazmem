@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wins/jazmem/internal/mcpapi"
-	"github.com/wins/jazmem/pkg/jazmem"
+	"github.com/gluonfield/jazmem/internal/mcpapi"
+	"github.com/gluonfield/jazmem/pkg/jazmem"
 )
 
 type Server struct {

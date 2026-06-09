@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/wins/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/memfs"
 )
 
 type SlugSuggestion struct {

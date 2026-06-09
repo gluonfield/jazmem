@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gluonfield/jazmem/pkg/jazmem"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wins/jazmem/pkg/jazmem"
 )
 
 func TestSearchEndpoint(t *testing.T) {

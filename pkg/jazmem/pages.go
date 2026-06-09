@@ -3,8 +3,8 @@ package jazmem
 import (
 	"context"
 
-	"github.com/wins/jazmem/internal/dream"
-	"github.com/wins/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/dream"
+	"github.com/gluonfield/jazmem/internal/memfs"
 )
 
 func (m *Memory) GetPage(ctx context.Context, slug string) (Page, error) {

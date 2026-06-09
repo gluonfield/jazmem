@@ -4,14 +4,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/wins/jazmem/internal/dream"
-	"github.com/wins/jazmem/internal/hygiene"
-	"github.com/wins/jazmem/internal/indexer"
-	"github.com/wins/jazmem/internal/ingest"
-	"github.com/wins/jazmem/internal/llm"
-	"github.com/wins/jazmem/internal/memfs"
-	"github.com/wins/jazmem/internal/search"
-	sqlitestore "github.com/wins/jazmem/internal/store/sqlite"
+	"github.com/gluonfield/jazmem/internal/dream"
+	"github.com/gluonfield/jazmem/internal/hygiene"
+	"github.com/gluonfield/jazmem/internal/indexer"
+	"github.com/gluonfield/jazmem/internal/ingest"
+	"github.com/gluonfield/jazmem/internal/llm"
+	"github.com/gluonfield/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/search"
+	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
 )
 
 type Memory struct {
