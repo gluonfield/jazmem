@@ -20,7 +20,7 @@ Use this skill whenever personal context may matter, when the user asks to remem
 - Preserve the user's original wording in raw notes and cite every durable fact promoted to canonical pages.
 - Store uncertain material in `inbox/` or `dreams/review/`; promote only durable, sourced facts to canonical pages.
 - Use wikilinks for durable references and relationships.
-- After writing/editing markdown: run `jazmem index`, verify with search, then `jazmem checkpoint "<message>"` for meaningful progress.
+- After writing/editing markdown: run `jazmem index`, then verify with search.
 
 ## Defaults
 
@@ -61,7 +61,7 @@ Use this sequence for most memory work:
 5. Promote only durable, sourced facts to canonical pages.
 6. Run `jazmem index`.
 7. Verify retrieval with a search that should find the new memory.
-8. Commit verified memory changes with `jazmem checkpoint "<message>"`.
+8. Commit with plain git only if the memory root is a git repo and the user explicitly asks.
 
 For detailed storage/page-shape rules, read [references/writing-memory.md](references/writing-memory.md).
 
@@ -112,7 +112,7 @@ When MCP tools are available, prefer them over shell commands for read-only retr
 
 MCP is served by `jazmem-server` at `http://127.0.0.1:9477/mcp`; there is no separate jazmem MCP binary. `jazmem_search` is agentic by default and returns a cited answer/gaps. Use `jazmem_get` to read raw markdown pages by slug.
 
-MCP is read-only. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations, not MCP tools.
+MCP is read-only. Indexing, dreaming, and link hygiene are CLI/server/scheduler operations, not MCP tools.
 
 ## Read Memory
 
@@ -146,7 +146,7 @@ Default write path:
 5. Add citations and wikilinks.
 6. Run `jazmem index`.
 7. Verify search.
-8. Checkpoint.
+8. Commit with plain git only when explicitly needed.
 
 Canonical page directories:
 

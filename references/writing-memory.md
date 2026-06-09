@@ -14,7 +14,7 @@ Agents store data by editing raw markdown files. Jazmem indexes it.
 6. Add source citations to every durable fact.
 7. Run `jazmem index`.
 8. Verify with a search query that should find the new memory.
-9. Commit meaningful progress with `jazmem checkpoint "<message>"`.
+9. Commit with plain git only if the memory root is a git repo and the user explicitly asks.
 
 Do not manually update SQLite after markdown edits.
 

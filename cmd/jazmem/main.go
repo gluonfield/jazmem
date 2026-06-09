@@ -59,8 +59,6 @@ func run(args []string) error {
 		return runGet(args[1:])
 	case "file":
 		return runFile(args[1:])
-	case "checkpoint":
-		return runCheckpoint(args[1:])
 	case "dream":
 		return runDream(args[1:])
 	case "link-hygiene":
@@ -296,23 +294,6 @@ func runFile(args []string) error {
 	return nil
 }
 
-func runCheckpoint(args []string) error {
-	cfg, rest, err := parseCommon("checkpoint", args)
-	if err != nil {
-		return err
-	}
-	m, err := jazmem.Open(cfg)
-	if err != nil {
-		return err
-	}
-	defer m.Close()
-	report, err := m.Checkpoint(context.Background(), strings.Join(rest, " "))
-	if err != nil {
-		return err
-	}
-	return printJSON(report)
-}
-
 func runDream(args []string) error {
 	cfg, _, err := parseCommon("dream", args)
 	if err != nil {
@@ -426,7 +407,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: jazmem [--root path] [--db path] <query>")
 	fmt.Fprintln(w, "       jazmem [--agentic] [--text] [--limit n] <query>")
 	fmt.Fprintln(w, "       jazmem init [--root path|--path path|path] [--db path]")
-	fmt.Fprintln(w, "       jazmem <index|search|get|page|file|checkpoint|dream|link-hygiene|eval|doctor> [--root path] [--db path]")
+	fmt.Fprintln(w, "       jazmem <index|search|get|page|file|dream|link-hygiene|eval|doctor> [--root path] [--db path]")
 }
 
 func resolveRootArg(root, path string, positional []string) (string, error) {

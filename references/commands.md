@@ -31,12 +31,6 @@ jazmem index
 jazmem doctor
 ```
 
-Commit markdown progress:
-
-```bash
-jazmem checkpoint "updated ink enterprise strategy"
-```
-
 Run maintenance:
 
 ```bash
@@ -140,14 +134,6 @@ Provider env:
 
 `jazmem file <slug>` returns the canonical markdown file path as plain text.
 
-`jazmem checkpoint "<message>"` returns `CheckpointReport`:
-
-- `repo_path`
-- `committed`
-- `commit`
-- `message`
-- `files_added`
-
 `jazmem index`, `jazmem dream`, `jazmem link-hygiene`, `jazmem eval`, and `jazmem doctor` return JSON reports.
 
 `jazmem index` includes `typed_links`; `jazmem doctor` includes `typed_link_count`.
@@ -222,4 +208,4 @@ Tools:
 - `jazmem_search`: input `{ "query": "..." }`; output `AgenticResponse`; requires `JAZMEM_API_KEY`.
 - `jazmem_get`: input `{ "slug": "people/alice" }`; primary text content is raw markdown. Structured output is `{ "found": true, "slug": "...", "path": "...", "title": "...", "raw": "..." }` or `{ "found": false, "error": "not found: people/alice", "suggestions": [...] }`.
 
-MCP is read-only. There is no MCP write/capture/index/dream/checkpoint tool. To store data, edit markdown directly. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations.
+MCP is read-only. There is no MCP write/capture/index/dream tool. To store data, edit markdown directly. Indexing, dreaming, and link hygiene are CLI/server/scheduler operations.

@@ -4,32 +4,26 @@ import (
 	"context"
 
 	"github.com/wins/jazmem/internal/memfs"
-	"github.com/wins/jazmem/internal/memgit"
 )
 
 type InitReport struct {
-	Root                  string    `json:"root"`
-	DBPath                string    `json:"db_path"`
-	Directories           []string  `json:"directories"`
-	CreatedDirs           []string  `json:"created_dirs"`
-	ExistingDirs          []string  `json:"existing_dirs"`
-	IndexedPages          int       `json:"indexed_pages"`
-	IndexedChunks         int       `json:"indexed_chunks"`
-	ExplicitLinks         int       `json:"explicit_links"`
-	MentionLinks          int       `json:"mention_links"`
-	UnresolvedLinks       int       `json:"unresolved_links"`
-	Git                   GitReport `json:"git"`
-	MarkdownSourceOfTruth bool      `json:"markdown_source_of_truth"`
+	Root                  string   `json:"root"`
+	DBPath                string   `json:"db_path"`
+	Directories           []string `json:"directories"`
+	CreatedDirs           []string `json:"created_dirs"`
+	ExistingDirs          []string `json:"existing_dirs"`
+	IndexedPages          int      `json:"indexed_pages"`
+	IndexedChunks         int      `json:"indexed_chunks"`
+	ExplicitLinks         int      `json:"explicit_links"`
+	MentionLinks          int      `json:"mention_links"`
+	UnresolvedLinks       int      `json:"unresolved_links"`
+	MarkdownSourceOfTruth bool     `json:"markdown_source_of_truth"`
 }
 
 func Init(ctx context.Context, cfg Config) (InitReport, error) {
 	cfg = ResolveConfig(cfg)
 	fs := memfs.New(cfg.Root)
 	layout, err := fs.EnsureLayoutReport()
-	if err != nil {
-		return InitReport{}, err
-	}
-	gitReport, err := memgit.Ensure(ctx, cfg.Root)
 	if err != nil {
 		return InitReport{}, err
 	}
@@ -43,21 +37,16 @@ func Init(ctx context.Context, cfg Config) (InitReport, error) {
 		return InitReport{}, err
 	}
 	return InitReport{
-		Root:            memory.Root(),
-		DBPath:          memory.DBPath(),
-		Directories:     layout.Directories,
-		CreatedDirs:     layout.Created,
-		ExistingDirs:    layout.Existing,
-		IndexedPages:    indexReport.PageCount,
-		IndexedChunks:   indexReport.ChunkCount,
-		ExplicitLinks:   indexReport.ExplicitLinks,
-		MentionLinks:    indexReport.MentionLinks,
-		UnresolvedLinks: indexReport.UnresolvedLinks,
-		Git: GitReport{
-			RepoPath:         gitReport.RepoPath,
-			Initialized:      gitReport.Initialized,
-			GitignoreUpdated: gitReport.GitignoreUpdated,
-		},
+		Root:                  memory.Root(),
+		DBPath:                memory.DBPath(),
+		Directories:           layout.Directories,
+		CreatedDirs:           layout.Created,
+		ExistingDirs:          layout.Existing,
+		IndexedPages:          indexReport.PageCount,
+		IndexedChunks:         indexReport.ChunkCount,
+		ExplicitLinks:         indexReport.ExplicitLinks,
+		MentionLinks:          indexReport.MentionLinks,
+		UnresolvedLinks:       indexReport.UnresolvedLinks,
 		MarkdownSourceOfTruth: true,
 	}, nil
 }

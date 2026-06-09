@@ -92,20 +92,6 @@ type Report struct {
 	UnresolvedLinks int `json:"unresolved_links"`
 }
 
-type GitReport struct {
-	RepoPath         string `json:"repo_path"`
-	Initialized      bool   `json:"initialized"`
-	GitignoreUpdated bool   `json:"gitignore_updated"`
-}
-
-type CheckpointReport struct {
-	RepoPath   string `json:"repo_path"`
-	Committed  bool   `json:"committed"`
-	Commit     string `json:"commit,omitempty"`
-	Message    string `json:"message"`
-	FilesAdded int    `json:"files_added"`
-}
-
 type DreamOptions struct {
 	Date time.Time `json:"date,omitempty"`
 }

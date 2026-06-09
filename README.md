@@ -11,7 +11,6 @@ jazmem does not yet have performance parity with gbrain.
 It has the right substrate for a smaller, cleaner version:
 
 - canonical markdown pages
-- git history for markdown memory
 - SQLite FTS5/BM25 search through `modernc.org/sqlite`
 - wikilink and mention extraction
 - compact search responses with page results, matched chunks, and stats
@@ -102,7 +101,7 @@ Initialize:
 jazmem init
 ```
 
-`init` creates the folder layout, initializes a git repo at the memory root if needed, maintains `.gitignore`, and rebuilds the SQLite index.
+`init` creates the folder layout and rebuilds the SQLite index. It does not initialize or manage git.
 
 ## Core Commands
 
@@ -144,12 +143,6 @@ Rebuild index:
 ```bash
 jazmem index
 jazmem doctor
-```
-
-Commit markdown progress:
-
-```bash
-jazmem checkpoint "updated ink enterprise strategy"
 ```
 
 Run maintenance:
@@ -223,7 +216,7 @@ Tools:
 - `jazmem_search`: provider-backed answer synthesis with citations and gaps. Input is `query`; output is `AgenticResponse`.
 - `jazmem_get`: read a page by slug. The primary MCP text content is the raw markdown; structured output also includes slug, title, path, and not-found suggestions.
 
-MCP is intentionally read-only. There is no MCP write/capture/index/dream/checkpoint tool. Agents store memory by editing markdown files. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations.
+MCP is intentionally read-only. There is no MCP write/capture/index/dream tool. Agents store memory by editing markdown files. Indexing, dreaming, and link hygiene are CLI/server/scheduler operations.
 
 ## Store Data
 
@@ -236,7 +229,7 @@ Agents should:
 5. Add citations for durable facts.
 6. Run `jazmem index`.
 7. Verify with search.
-8. Run `jazmem checkpoint "<message>"`.
+8. Commit with plain git only if the memory root is a git repo and the user explicitly asks.
 
 Useful locations:
 
@@ -369,6 +362,6 @@ No LLM is used for this path.
 - Vector search
 - Reranker
 - Full ingestion connectors
-- Durable workflow/checkpointing for dream beyond markdown run pages
+- Durable workflow state for dream beyond markdown run pages
 
 These should be added behind the existing package/CLI surfaces without changing markdown as the source of truth.
