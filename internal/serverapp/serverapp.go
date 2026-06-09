@@ -86,6 +86,7 @@ func StartHTTPServer(lc fx.Lifecycle, opts Options, memory *jazmem.Memory, serve
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			fmt.Printf("jazmem server listening on http://%s\n", opts.Addr)
+			fmt.Printf("mcp endpoint: http://%s/mcp\n", opts.Addr)
 			fmt.Printf("root: %s\n", memory.Root())
 			fmt.Printf("db: %s\n", memory.DBPath())
 			go func() {

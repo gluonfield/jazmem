@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wins/jazmem/pkg/jazmem"
 )
 
@@ -121,5 +122,86 @@ func TestFileEndpointSuggestsSimilarSlugs(t *testing.T) {
 	}
 	if payload.Error != "not found: people/alice" || len(payload.Suggestions) == 0 || payload.Suggestions[0].Slug != "people/alice-bentick" {
 		t.Fatalf("unexpected payload %#v", payload)
+	}
+}
+
+func TestMCPEndpointUsesServerMemory(t *testing.T) {
+	llm := fakeProvider(t, `{"answer":"Alice works on jazmem HTTP MCP.","citation_ids":[1],"gaps":[],"warnings":[]}`)
+	defer llm.Close()
+	mem, err := jazmem.Open(jazmem.Config{
+		Root:             t.TempDir(),
+		DBPath:           filepath.Join(t.TempDir(), "index.sqlite"),
+		APIKey:           "test-key",
+		ProviderEndpoint: llm.URL,
+		Model:            "test-model",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mem.Close()
+	if err := os.WriteFile(
+		filepath.Join(mem.Root(), "people", "alice-http-mcp.md"),
+		[]byte("---\ntitle: Alice HTTP MCP\naliases: [Alice]\n---\n\n# Alice HTTP MCP\n\nAlice works on jazmem HTTP MCP.\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.Reindex(t.Context(), jazmem.ReindexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	httpServer := httptest.NewServer(New(mem))
+	defer httpServer.Close()
+	client := mcp.NewClient(&mcp.Implementation{Name: "jazmem-http-test", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: httpServer.URL + "/mcp"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	tools, err := session.ListTools(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, tool := range tools.Tools {
+		names[tool.Name] = true
+	}
+	if !names["jazmem_search"] || !names["jazmem_get"] {
+		t.Fatalf("unexpected MCP tools %#v", names)
+	}
+
+	searchCall, err := session.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      "jazmem_search",
+		Arguments: map[string]any{"query": "Alice HTTP MCP"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var search jazmem.AgenticResponse
+	data, err := json.Marshal(searchCall.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &search); err != nil {
+		t.Fatalf("decode MCP search: %v\n%s", err, string(data))
+	}
+	if !strings.Contains(search.Answer, "Alice works") || len(search.Citations) == 0 || search.Citations[0].Slug != "people/alice-http-mcp" {
+		t.Fatalf("unexpected MCP search response %#v", search)
+	}
+
+	pageCall, err := session.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      "jazmem_get",
+		Arguments: map[string]any{"slug": "people/alice-http-mcp"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pageCall.Content) == 0 {
+		t.Fatal("expected markdown content")
+	}
+	text, ok := pageCall.Content[0].(*mcp.TextContent)
+	if !ok || !strings.Contains(text.Text, "Alice works on jazmem HTTP MCP") {
+		t.Fatalf("unexpected MCP page content %#v", pageCall.Content)
 	}
 }

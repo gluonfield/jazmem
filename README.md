@@ -58,7 +58,7 @@ From the local repo:
 ```bash
 cd /Users/wins/Projects/personal/jarvis/jazmem
 go test ./...
-GOBIN=/Users/wins/.local/bin go install ./cmd/jazmem ./cmd/jazmem-server ./cmd/jazmem-mcp
+GOBIN=/Users/wins/.local/bin go install ./cmd/jazmem ./cmd/jazmem-server
 ```
 
 `/Users/wins/.local/bin` must be in `PATH`.
@@ -67,7 +67,7 @@ Verify:
 
 ```bash
 which jazmem
-which jazmem-mcp
+which jazmem-server
 jazmem doctor
 ```
 
@@ -189,15 +189,21 @@ curl -X POST 'http://127.0.0.1:9477/dream'
 curl -X POST 'http://127.0.0.1:9477/link-hygiene'
 ```
 
+MCP streamable HTTP endpoint:
+
+```text
+http://127.0.0.1:9477/mcp
+```
+
 There is no capture endpoint. Store data by editing markdown files.
 
 ## MCP Server
 
-Run the stdio MCP server:
+MCP is served by `jazmem-server`; there is no separate MCP binary.
 
 ```bash
-jazmem-mcp
-jazmem-mcp --root ~/.jaz/memory --db ~/.jaz/jazmem.sqlite
+jazmem-server
+jazmem-server --root ~/.jaz/memory --db ~/.jaz/jazmem.sqlite
 ```
 
 Example MCP client config:
@@ -206,8 +212,7 @@ Example MCP client config:
 {
   "mcpServers": {
     "jazmem": {
-      "command": "/Users/wins/.local/bin/jazmem-mcp",
-      "args": []
+      "url": "http://127.0.0.1:9477/mcp"
     }
   }
 }

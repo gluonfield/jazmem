@@ -110,7 +110,7 @@ When MCP tools are available, prefer them over shell commands for read-only retr
 - `jazmem_search`
 - `jazmem_get`
 
-`jazmem_search` is agentic by default and returns a cited answer/gaps. Use `jazmem_get` to read raw markdown pages by slug.
+MCP is served by `jazmem-server` at `http://127.0.0.1:9477/mcp`; there is no separate jazmem MCP binary. `jazmem_search` is agentic by default and returns a cited answer/gaps. Use `jazmem_get` to read raw markdown pages by slug.
 
 MCP is read-only. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations, not MCP tools.
 

@@ -198,11 +198,11 @@ There is no capture endpoint. Store data by editing markdown files.
 
 ## MCP Server
 
-Start the stdio MCP server:
+Start `jazmem-server`; MCP is exposed on the same process:
 
 ```bash
-jazmem-mcp
-jazmem-mcp --root ~/.jaz/memory --db ~/.jaz/jazmem.sqlite
+jazmem-server
+jazmem-server --root ~/.jaz/memory --db ~/.jaz/jazmem.sqlite
 ```
 
 MCP client config:
@@ -211,8 +211,7 @@ MCP client config:
 {
   "mcpServers": {
     "jazmem": {
-      "command": "/Users/wins/.local/bin/jazmem-mcp",
-      "args": []
+      "url": "http://127.0.0.1:9477/mcp"
     }
   }
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wins/jazmem/internal/mcpapi"
 	"github.com/wins/jazmem/pkg/jazmem"
 )
 
@@ -26,6 +27,7 @@ func New(memory *jazmem.Memory) http.Handler {
 	mux.HandleFunc("POST /reindex", s.reindex)
 	mux.HandleFunc("POST /dream", s.dream)
 	mux.HandleFunc("POST /link-hygiene", s.linkHygiene)
+	mux.Handle("/mcp", mcpapi.NewHTTPHandler(memory))
 	return recoverJSON(mux)
 }
 
