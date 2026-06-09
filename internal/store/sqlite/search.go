@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/searchdb"
 )
 
 func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
@@ -37,7 +39,7 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 }
 
 func (s *Store) SearchTitleAlias(ctx context.Context, query string, limit int) ([]SearchResult, error) {
-	terms := lookupTerms(query)
+	terms := titleAliasLookupTerms(query)
 	if len(terms) == 0 {
 		return nil, nil
 	}
@@ -136,66 +138,53 @@ func (s *Store) searchFTS(ctx context.Context, match string, limit int) ([]Searc
 
 func (s *Store) searchTitleAliasTerm(ctx context.Context, term string, limit int) ([]SearchResult, error) {
 	like := "%" + term + "%"
-	rows, err := s.db.QueryContext(ctx, `WITH candidates AS (
-			SELECT p.slug,
-				CASE
-					WHEN lower(p.title) = ? THEN -4.00
-					WHEN lower(p.title) LIKE ? THEN -3.00
-					ELSE 10.00
-				END AS score
-			FROM pages p
-			WHERE lower(p.title) = ? OR lower(p.title) LIKE ?
-			UNION ALL
-			SELECT a.slug,
-				CASE
-					WHEN a.normalized_alias = ? THEN -4.20
-					WHEN a.normalized_alias LIKE ? THEN -3.20
-					ELSE 10.00
-				END AS score
-			FROM aliases a
-			WHERE a.normalized_alias = ? OR a.normalized_alias LIKE ?
-		),
-		ranked AS (
-			SELECT slug, MIN(score) AS score
-			FROM candidates
-			GROUP BY slug
-			ORDER BY score
-			LIMIT ?
-		)
-		SELECT r.slug, COALESCE(c.chunk_index, 0), p.title,
-			COALESCE(substr(c.body, 1, 600), p.title) AS snippet,
-			r.score
-		FROM ranked r
-		JOIN pages p ON p.slug = r.slug
-		LEFT JOIN chunks c ON c.slug = r.slug AND c.chunk_index = 0
-		ORDER BY r.score, p.title`,
-		term, like, term, like,
-		term, like, term, like,
-		limit)
+	rows, err := s.searchQ.SearchTitleAliasTerm(ctx, searchdb.SearchTitleAliasTermParams{
+		Title:             term,
+		Title_2:           like,
+		Title_3:           term,
+		Title_4:           like,
+		NormalizedAlias:   term,
+		NormalizedAlias_2: like,
+		NormalizedAlias_3: term,
+		NormalizedAlias_4: like,
+		Limit:             int64(limit),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	return scanSearchRows(rows)
+	results := make([]SearchResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, SearchResult{
+			Slug:       row.Slug,
+			Title:      row.Title,
+			ChunkIndex: int(row.ChunkIndex),
+			Snippet:    row.Snippet,
+			Score:      row.Score,
+		})
+	}
+	return results, nil
 }
 
 func (s *Store) searchLike(ctx context.Context, query string, limit int) ([]SearchResult, error) {
 	like := "%" + query + "%"
-	rows, err := s.db.QueryContext(ctx, `SELECT c.slug, c.chunk_index, p.title,
-		substr(c.body, 1, 240) AS snippet,
-		CASE WHEN p.title LIKE ? THEN -0.5 ELSE 0.0 END AS rank
-		FROM chunks c
-		JOIN pages p ON p.slug = c.slug
-		WHERE p.title LIKE ? OR c.body LIKE ?
-		ORDER BY rank, p.title, c.chunk_index
-		LIMIT ?`, like, like, like, chunkPoolLimit(limit))
+	rows, err := s.searchQ.SearchLike(ctx, searchdb.SearchLikeParams{
+		Title:   like,
+		Title_2: like,
+		Body:    like,
+		Limit:   int64(chunkPoolLimit(limit)),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	results, err := scanSearchRows(rows)
-	if err != nil {
-		return nil, err
+	results := make([]SearchResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, SearchResult{
+			Slug:       row.Slug,
+			Title:      row.Title,
+			ChunkIndex: int(row.ChunkIndex),
+			Snippet:    row.Snippet,
+			Score:      row.Score,
+		})
 	}
 	return bestPerPage(results, limit), nil
 }

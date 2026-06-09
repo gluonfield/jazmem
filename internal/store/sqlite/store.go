@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/entitydb"
+	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/searchdb"
 	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/statedb"
 
 	_ "modernc.org/sqlite"
@@ -17,6 +18,7 @@ import (
 type Store struct {
 	db      *sql.DB
 	entityQ entitydb.Querier
+	searchQ searchdb.Querier
 	stateQ  statedb.Querier
 }
 
@@ -105,6 +107,7 @@ func Open(path string) (*Store, error) {
 	store := &Store{
 		db:      db,
 		entityQ: entitydb.New(db),
+		searchQ: searchdb.New(db),
 		stateQ:  statedb.New(db),
 	}
 	if err := store.configure(); err != nil {

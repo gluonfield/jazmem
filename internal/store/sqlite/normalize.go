@@ -17,7 +17,7 @@ func millis(t time.Time) int64 {
 
 var ftsToken = regexp.MustCompile(`[A-Za-z0-9_]+`)
 
-var searchStopwords = map[string]bool{
+var ignoredLookupTokens = map[string]bool{
 	"about": true,
 	"and":   true,
 	"are":   true,
@@ -67,7 +67,7 @@ func ftsTokens(query string) []string {
 	return tokens
 }
 
-func lookupTerms(query string) []string {
+func titleAliasLookupTerms(query string) []string {
 	full := normalizeLookup(query)
 	tokens := ftsTokens(query)
 	seen := map[string]bool{}
@@ -83,7 +83,7 @@ func lookupTerms(query string) []string {
 	add(full)
 	for _, token := range tokens {
 		term := normalizeLookup(token)
-		if searchStopwords[term] {
+		if ignoredLookupTokens[term] {
 			continue
 		}
 		if len(term) < 2 && len(tokens) > 1 {
