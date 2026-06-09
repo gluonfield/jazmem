@@ -149,11 +149,11 @@ func (m *Memory) synthesizeAgentic(ctx context.Context, query string, response S
 		Warnings    []string `json:"warnings"`
 	}
 	if err := json.Unmarshal([]byte(llmResp.Content), &parsed); err != nil {
-		return AgenticResponse{}, fmt.Errorf("decode agentic OpenRouter JSON: %w", err)
+		return AgenticResponse{}, fmt.Errorf("decode agentic provider JSON: %w", err)
 	}
 	parsed.Answer = strings.TrimSpace(parsed.Answer)
 	if parsed.Answer == "" {
-		return AgenticResponse{}, fmt.Errorf("agentic OpenRouter response missing answer")
+		return AgenticResponse{}, fmt.Errorf("agentic provider response missing answer")
 	}
 	citations, citationWarnings := citationsFromIDs(parsed.CitationIDs, byID)
 	warnings := append([]string{}, parsed.Warnings...)

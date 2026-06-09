@@ -257,7 +257,7 @@ func parseDream(content string) (llmDream, []string) {
 	var parsed llmDream
 	var warnings []string
 	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
-		warnings = append(warnings, "Failed to parse OpenRouter dream JSON; raw model output was captured as review.")
+		warnings = append(warnings, "Failed to parse provider dream JSON; raw model output was captured as review.")
 		parsed.Review = append(parsed.Review, dreamReview{
 			Candidate: content,
 			Reason:    "invalid JSON from model",

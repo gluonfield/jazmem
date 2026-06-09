@@ -28,7 +28,7 @@ The gbrain features most likely to matter for retrieval quality are:
 6. Incremental indexing: required once the corpus grows, but not the main quality driver.
 7. Dream consolidation: useful only if it edits canonical pages conservatively with citations and review queues.
 
-Current jazmem retrieval uses title/alias matching, BM25 chunks with per-page max-pool, typed relationship retrieval, page-level merging, and one-hop memlink/backlink expansion. Agentic answer synthesis is an OpenRouter layer over those retrieved results. It does not use embeddings or a reranker.
+Current jazmem retrieval uses title/alias matching, BM25 chunks with per-page max-pool, typed relationship retrieval, page-level merging, and one-hop memlink/backlink expansion. Agentic answer synthesis is a provider-backed LLM layer over those retrieved results. It does not use embeddings or a reranker.
 
 Do not copy gbrain wholesale. These are not v1 performance requirements for jazmem:
 
@@ -48,7 +48,7 @@ query
 -> merge by slug: one page result with matched evidence
 -> graph expansion: explicit links, backlinks, and mentions around strongest pages
 -> optional future rerank top candidates
--> return compact raw results or OpenRouter-backed agentic answer
+-> return compact raw results or provider-backed agentic answer
 ```
 
 ## Install
@@ -118,7 +118,18 @@ jazmem "what connects Alice and Widget Co"
 jazmem eval
 ```
 
-`--agentic` calls OpenRouter and requires `OPENROUTER_API_KEY`. It uses an internal context budget, so `--limit` does not control agentic retrieval. `jazmem` loads `.env` from the current tree when present, including `jaz/backend/.env` in this workspace.
+`--agentic` calls the configured OpenAI-compatible provider and requires `JAZMEM_API_KEY`. It uses an internal context budget, so `--limit` does not control agentic retrieval. `jazmem` loads `.env` from the current tree when present, including `jaz/backend/.env` in this workspace.
+
+LLM provider settings:
+
+```bash
+export JAZMEM_PROVIDER_ENDPOINT="https://openrouter.ai/api/v1"
+export JAZMEM_API_KEY="..."
+export JAZMEM_MODEL="openai/gpt-5.4-mini"
+export JAZMEM_REASONING_EFFORT="medium"
+```
+
+`JAZMEM_PROVIDER_ENDPOINT` defaults to `https://openrouter.ai/api/v1`; `JAZMEM_MODEL` defaults to `openai/gpt-5.4-mini`. `JAZMEM_REASONING_EFFORT` is optional and is sent as `reasoning_effort` when set.
 
 Read pages:
 
@@ -148,7 +159,7 @@ jazmem dream
 jazmem link-hygiene
 ```
 
-`dream` calls OpenRouter. It writes a dream run page, appends only validated high-confidence bullets to existing canonical pages, and sends ambiguous items to `dreams/review/`.
+`dream` calls the configured LLM provider. It writes a dream run page, appends only validated high-confidence bullets to existing canonical pages, and sends ambiguous items to `dreams/review/`.
 
 ## Server
 
@@ -204,7 +215,7 @@ Example MCP client config:
 
 Tools:
 
-- `jazmem_search`: OpenRouter-backed answer synthesis with citations and gaps. Input is `query`; output is `AgenticResponse`.
+- `jazmem_search`: provider-backed answer synthesis with citations and gaps. Input is `query`; output is `AgenticResponse`.
 - `jazmem_get`: read a page by slug. The primary MCP text content is the raw markdown; structured output also includes slug, title, path, and not-found suggestions.
 
 MCP is intentionally read-only. There is no MCP write/capture/index/dream/checkpoint tool. Agents store memory by editing markdown files. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations.
@@ -298,7 +309,7 @@ returns `AgenticResponse`:
 }
 ```
 
-This is OpenRouter-backed synthesis over retrieved markdown evidence. Raw retrieval remains deterministic and free; `--agentic` requires `OPENROUTER_API_KEY` and uses its own retrieval budget instead of the CLI `--limit`.
+This is provider-backed synthesis over retrieved markdown evidence. Raw retrieval remains deterministic and free; `--agentic` requires `JAZMEM_API_KEY` and uses its own retrieval budget instead of the CLI `--limit`.
 
 Eval:
 

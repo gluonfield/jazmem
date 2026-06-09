@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	defaultOpenRouterBaseURL = "https://openrouter.ai/api/v1"
-	defaultOpenRouterModel   = "openai/gpt-5.4-mini"
+	defaultProviderEndpoint = "https://openrouter.ai/api/v1"
+	defaultModel            = "openai/gpt-5.4-mini"
 )
 
 var loadEnvOnce sync.Once
@@ -61,23 +61,23 @@ func ResolveConfig(cfg Config) Config {
 	cfg.Root = root
 	cfg.DBPath = cleanPath(dbPath)
 
-	if strings.TrimSpace(cfg.OpenRouterAPIKey) == "" {
-		cfg.OpenRouterAPIKey = strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		cfg.APIKey = strings.TrimSpace(os.Getenv("JAZMEM_API_KEY"))
 	}
-	if strings.TrimSpace(cfg.OpenRouterModel) == "" {
-		cfg.OpenRouterModel = strings.TrimSpace(os.Getenv("JAZMEM_OPENROUTER_MODEL"))
+	if strings.TrimSpace(cfg.Model) == "" {
+		cfg.Model = strings.TrimSpace(os.Getenv("JAZMEM_MODEL"))
 	}
-	if strings.TrimSpace(cfg.OpenRouterModel) == "" {
-		cfg.OpenRouterModel = strings.TrimSpace(os.Getenv("OPENROUTER_MODEL"))
+	if strings.TrimSpace(cfg.Model) == "" {
+		cfg.Model = defaultModel
 	}
-	if strings.TrimSpace(cfg.OpenRouterModel) == "" {
-		cfg.OpenRouterModel = defaultOpenRouterModel
+	if strings.TrimSpace(cfg.ProviderEndpoint) == "" {
+		cfg.ProviderEndpoint = strings.TrimSpace(os.Getenv("JAZMEM_PROVIDER_ENDPOINT"))
 	}
-	if strings.TrimSpace(cfg.OpenRouterBaseURL) == "" {
-		cfg.OpenRouterBaseURL = strings.TrimSpace(os.Getenv("JAZMEM_OPENROUTER_BASE_URL"))
+	if strings.TrimSpace(cfg.ProviderEndpoint) == "" {
+		cfg.ProviderEndpoint = defaultProviderEndpoint
 	}
-	if strings.TrimSpace(cfg.OpenRouterBaseURL) == "" {
-		cfg.OpenRouterBaseURL = defaultOpenRouterBaseURL
+	if strings.TrimSpace(cfg.ReasoningEffort) == "" {
+		cfg.ReasoningEffort = strings.TrimSpace(os.Getenv("JAZMEM_REASONING_EFFORT"))
 	}
 	return cfg
 }

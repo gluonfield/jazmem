@@ -3,12 +3,13 @@ package jazmem
 import "time"
 
 type Config struct {
-	Root              string
-	DBPath            string
-	OpenRouterAPIKey  string
-	OpenRouterModel   string
-	OpenRouterBaseURL string
-	Now               func() time.Time
+	Root             string
+	DBPath           string
+	ProviderEndpoint string
+	APIKey           string
+	Model            string
+	ReasoningEffort  string
+	Now              func() time.Time
 }
 
 type PageRef struct {

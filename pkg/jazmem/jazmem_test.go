@@ -17,9 +17,9 @@ func TestRawMarkdownReindexSearchAndDream(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
 	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
-	llm := fakeOpenRouter(t, `{"summary":"Promoted durable jazmem search note.","promotions":[{"target_slug":"notes/jazmem-search","section":"Current","bullet":"- Alice and Riley are testing jazmem search. [Source: [[inbox/alice-riley-note]], 2026-06-08]","confidence":"high","source_slugs":["inbox/alice-riley-note"]}],"review":[],"skipped":[]}`)
+	llm := fakeProvider(t, `{"summary":"Promoted durable jazmem search note.","promotions":[{"target_slug":"notes/jazmem-search","section":"Current","bullet":"- Alice and Riley are testing jazmem search. [Source: [[inbox/alice-riley-note]], 2026-06-08]","confidence":"high","source_slugs":["inbox/alice-riley-note"]}],"review":[],"skipped":[]}`)
 	defer llm.Close()
-	mem, err := Open(Config{Root: root, DBPath: dbPath, Now: func() time.Time { return now }, OpenRouterAPIKey: "test-key", OpenRouterBaseURL: llm.URL, OpenRouterModel: "test-model"})
+	mem, err := Open(Config{Root: root, DBPath: dbPath, Now: func() time.Time { return now }, APIKey: "test-key", ProviderEndpoint: llm.URL, Model: "test-model", ReasoningEffort: "medium"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,9 +318,9 @@ func TestEvaluateScoresExpectedSlugs(t *testing.T) {
 func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
-	llm := fakeOpenRouter(t, `{"answer":"Leeroo is connected to Ink in the opportunity corpus.","citation_ids":[1],"gaps":[],"warnings":[]}`)
+	llm := fakeProvider(t, `{"answer":"Leeroo is connected to Ink in the opportunity corpus.","citation_ids":[1],"gaps":[],"warnings":[]}`)
 	defer llm.Close()
-	mem, err := Open(Config{Root: root, DBPath: dbPath, OpenRouterAPIKey: "test-key", OpenRouterBaseURL: llm.URL, OpenRouterModel: "test-model"})
+	mem, err := Open(Config{Root: root, DBPath: dbPath, APIKey: "test-key", ProviderEndpoint: llm.URL, Model: "test-model", ReasoningEffort: "medium"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,11 +354,11 @@ func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
 	}
 }
 
-func fakeOpenRouter(t *testing.T, content string) *httptest.Server {
+func fakeProvider(t *testing.T, content string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
-			t.Fatalf("unexpected OpenRouter path %s", r.URL.Path)
+			t.Fatalf("unexpected provider path %s", r.URL.Path)
 		}
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Fatalf("missing authorization header")
@@ -369,6 +369,9 @@ func fakeOpenRouter(t *testing.T, content string) *httptest.Server {
 		}
 		if payload["model"] != "test-model" {
 			t.Fatalf("model = %#v", payload["model"])
+		}
+		if payload["reasoning_effort"] != "medium" {
+			t.Fatalf("reasoning_effort = %#v", payload["reasoning_effort"])
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{

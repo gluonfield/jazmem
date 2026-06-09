@@ -119,10 +119,17 @@ Interpretation:
 
 Rules:
 
-- Agentic mode requires `OPENROUTER_API_KEY`.
+- Agentic mode requires `JAZMEM_API_KEY`.
 - Agentic mode uses its own internal retrieval budget. `--limit` does not control it.
 - Raw search remains deterministic and does not call an LLM.
 - Use agentic mode when answering the user directly; use raw search when selecting pages to read or edit.
+
+Provider env:
+
+- `JAZMEM_PROVIDER_ENDPOINT`: OpenAI-compatible base endpoint; defaults to `https://openrouter.ai/api/v1`.
+- `JAZMEM_API_KEY`: provider API key.
+- `JAZMEM_MODEL`: chat model; defaults to `openai/gpt-5.4-mini`.
+- `JAZMEM_REASONING_EFFORT`: optional; sent as `reasoning_effort` when set.
 
 ## Other Responses
 
@@ -213,7 +220,7 @@ MCP client config:
 
 Tools:
 
-- `jazmem_search`: input `{ "query": "..." }`; output `AgenticResponse`; requires `OPENROUTER_API_KEY`.
+- `jazmem_search`: input `{ "query": "..." }`; output `AgenticResponse`; requires `JAZMEM_API_KEY`.
 - `jazmem_get`: input `{ "slug": "people/alice" }`; primary text content is raw markdown. Structured output is `{ "found": true, "slug": "...", "path": "...", "title": "...", "raw": "..." }` or `{ "found": false, "error": "not found: people/alice", "suggestions": [...] }`.
 
 MCP is read-only. There is no MCP write/capture/index/dream/checkpoint tool. To store data, edit markdown directly. Indexing, dreaming, link hygiene, and checkpointing are CLI/server/scheduler operations.

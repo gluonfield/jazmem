@@ -47,6 +47,27 @@ func TestResolveConfigUsesEnvOverrides(t *testing.T) {
 	}
 }
 
+func TestResolveConfigUsesProviderEnv(t *testing.T) {
+	t.Setenv("JAZMEM_API_KEY", "test-key")
+	t.Setenv("JAZMEM_MODEL", "test-model")
+	t.Setenv("JAZMEM_PROVIDER_ENDPOINT", "https://provider.example/v1")
+	t.Setenv("JAZMEM_REASONING_EFFORT", "medium")
+
+	cfg := ResolveConfig(Config{})
+	if cfg.APIKey != "test-key" {
+		t.Fatalf("api key = %q, want test-key", cfg.APIKey)
+	}
+	if cfg.Model != "test-model" {
+		t.Fatalf("model = %q, want test-model", cfg.Model)
+	}
+	if cfg.ProviderEndpoint != "https://provider.example/v1" {
+		t.Fatalf("provider endpoint = %q", cfg.ProviderEndpoint)
+	}
+	if cfg.ReasoningEffort != "medium" {
+		t.Fatalf("reasoning effort = %q, want medium", cfg.ReasoningEffort)
+	}
+}
+
 func TestInitBootstrapsLayoutAndIndex(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "memory")
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")

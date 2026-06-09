@@ -14,14 +14,14 @@ import (
 )
 
 func TestSearchEndpoint(t *testing.T) {
-	llm := fakeOpenRouter(t, `{"answer":"jazmem search is being tested by Alice and Riley.","citation_ids":[1],"gaps":[],"warnings":[]}`)
+	llm := fakeProvider(t, `{"answer":"jazmem search is being tested by Alice and Riley.","citation_ids":[1],"gaps":[],"warnings":[]}`)
 	defer llm.Close()
 	mem, err := jazmem.Open(jazmem.Config{
-		Root:              t.TempDir(),
-		DBPath:            filepath.Join(t.TempDir(), "index.sqlite"),
-		OpenRouterAPIKey:  "test-key",
-		OpenRouterBaseURL: llm.URL,
-		OpenRouterModel:   "test-model",
+		Root:             t.TempDir(),
+		DBPath:           filepath.Join(t.TempDir(), "index.sqlite"),
+		APIKey:           "test-key",
+		ProviderEndpoint: llm.URL,
+		Model:            "test-model",
 		Now: func() time.Time {
 			return time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
 		},
@@ -72,11 +72,11 @@ func TestSearchEndpoint(t *testing.T) {
 	}
 }
 
-func fakeOpenRouter(t *testing.T, content string) *httptest.Server {
+func fakeProvider(t *testing.T, content string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
-			t.Fatalf("unexpected OpenRouter path %s", r.URL.Path)
+			t.Fatalf("unexpected provider path %s", r.URL.Path)
 		}
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Fatalf("missing authorization header")

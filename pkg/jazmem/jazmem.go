@@ -52,9 +52,10 @@ func Open(cfg Config) (*Memory, error) {
 	m.search = &search.Service{Store: store}
 	m.ingester = &ingest.Service{}
 	m.llm = llm.New(llm.Config{
-		APIKey:  cfg.OpenRouterAPIKey,
-		Model:   cfg.OpenRouterModel,
-		BaseURL: cfg.OpenRouterBaseURL,
+		APIKey:          cfg.APIKey,
+		Model:           cfg.Model,
+		Endpoint:        cfg.ProviderEndpoint,
+		ReasoningEffort: cfg.ReasoningEffort,
 	})
 	m.dream = &dream.Service{
 		FS:  fs,

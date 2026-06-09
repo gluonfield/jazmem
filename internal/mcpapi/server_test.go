@@ -15,12 +15,12 @@ import (
 )
 
 func TestServerTools(t *testing.T) {
-	llm := fakeOpenRouter(t, `{"answer":"Alice works on jazmem MCP testing.","citation_ids":[1],"gaps":[],"warnings":[]}`)
+	llm := fakeProvider(t, `{"answer":"Alice works on jazmem MCP testing.","citation_ids":[1],"gaps":[],"warnings":[]}`)
 	defer llm.Close()
 	mem := testMemory(t, jazmem.Config{
-		OpenRouterAPIKey:  "test-key",
-		OpenRouterBaseURL: llm.URL,
-		OpenRouterModel:   "test-model",
+		APIKey:           "test-key",
+		ProviderEndpoint: llm.URL,
+		Model:            "test-model",
 	})
 	defer mem.Close()
 
@@ -112,11 +112,11 @@ func testMemory(t *testing.T, cfg jazmem.Config) *jazmem.Memory {
 	return mem
 }
 
-func fakeOpenRouter(t *testing.T, content string) *httptest.Server {
+func fakeProvider(t *testing.T, content string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
-			t.Fatalf("unexpected OpenRouter path %s", r.URL.Path)
+			t.Fatalf("unexpected provider path %s", r.URL.Path)
 		}
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Fatalf("missing authorization header")

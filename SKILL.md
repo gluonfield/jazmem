@@ -84,7 +84,14 @@ jazmem --agentic --text "what is open for Alice"
 
 Raw search is deterministic and free. It uses title/alias candidates, BM25 chunks with per-page max-pool, typed relationship retrieval, and one-hop memlink/backlink expansion.
 
-`--agentic` calls OpenRouter and requires `OPENROUTER_API_KEY`. It uses its own internal context budget; do not use `--limit` to tune agentic retrieval. Use raw search when deciding which pages to read or edit.
+`--agentic` calls the configured OpenAI-compatible provider and requires `JAZMEM_API_KEY`. It uses its own internal context budget; do not use `--limit` to tune agentic retrieval. Use raw search when deciding which pages to read or edit.
+
+Provider env:
+
+- `JAZMEM_PROVIDER_ENDPOINT`
+- `JAZMEM_API_KEY`
+- `JAZMEM_MODEL`
+- `JAZMEM_REASONING_EFFORT`
 
 Search strategy:
 
@@ -171,7 +178,7 @@ jazmem link-hygiene
 - `jazmem index`: rebuilds SQLite from markdown.
 - `jazmem doctor`: checks root/db/index counts.
 - `jazmem eval`: fixed retrieval eval, no LLM.
-- `jazmem dream`: OpenRouter-backed consolidation; writes run/review pages and only promotes validated cited bullets.
+- `jazmem dream`: provider-backed consolidation; writes run/review pages and only promotes validated cited bullets.
 - `jazmem link-hygiene`: generates relationship proposals in `dreams/review/`.
 
 ## Anti-Patterns
