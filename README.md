@@ -218,6 +218,24 @@ Tools:
 
 MCP is intentionally read-only. There is no MCP write/capture/index/dream tool. Agents store memory by editing markdown files. Indexing, dreaming, and link hygiene are CLI/server/scheduler operations.
 
+## Database Development
+
+jazmem uses SQLite through `modernc.org/sqlite`.
+
+- Schema migrations: `internal/store/sqlite/migrations/*.sql`
+- Migration runner: embedded Goose in `internal/store/sqlite/migrations.go`
+- SQLC config: `sqlc.yaml`
+- Static query sources: `internal/store/sqlite/queries/<concern>/*.sql`
+- Generated query packages: `internal/store/sqlite/generated/<concern>db`
+
+Generate SQL accessors:
+
+```bash
+go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
+```
+
+The generated packages are intentionally separated by concern. Do not merge indexing, state, entity, search, and graph operations into one generated interface. Keep dynamic graph/search SQL handwritten when generation would make it less clear.
+
 ## Store Data
 
 Agents should:
