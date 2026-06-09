@@ -71,6 +71,13 @@ func TestSearchEndpoint(t *testing.T) {
 	if !strings.Contains(agentic.Answer, "jazmem") || len(agentic.Citations) == 0 || agentic.Citations[0].Slug != "inbox/search-note" {
 		t.Fatalf("unexpected agentic payload %#v", agentic)
 	}
+
+	agenticLimitReq := httptest.NewRequest(http.MethodGet, "/search?q=jazmem&agentic=1&limit=not-a-raw-limit", nil)
+	agenticLimitResp := httptest.NewRecorder()
+	handler.ServeHTTP(agenticLimitResp, agenticLimitReq)
+	if agenticLimitResp.Code != http.StatusOK {
+		t.Fatalf("agentic search with ignored limit status = %d body=%s", agenticLimitResp.Code, agenticLimitResp.Body.String())
+	}
 }
 
 func fakeProvider(t *testing.T, content string) *httptest.Server {

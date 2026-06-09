@@ -129,7 +129,7 @@ func runSearch(args []string) error {
 	}
 	defer func() { _ = m.Close() }()
 	if agentic {
-		result, err := m.AgenticSearch(context.Background(), query, jazmem.AgenticOptions{Limit: limit})
+		result, err := m.AgenticSearch(context.Background(), query, jazmem.AgenticOptions{})
 		if err != nil {
 			return err
 		}

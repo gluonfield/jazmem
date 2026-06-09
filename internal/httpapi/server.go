@@ -57,6 +57,15 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		writeError(w, errors.New("query parameter q is required"))
 		return
 	}
+	if isTruthy(r.URL.Query().Get("agentic")) {
+		results, err := s.Memory.AgenticSearch(r.Context(), query, jazmem.AgenticOptions{})
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, results)
+		return
+	}
 	limit := 10
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
@@ -65,15 +74,6 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		limit = parsed
-	}
-	if isTruthy(r.URL.Query().Get("agentic")) {
-		results, err := s.Memory.AgenticSearch(r.Context(), query, jazmem.AgenticOptions{Limit: limit})
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, results)
-		return
 	}
 	results, err := s.Memory.Retrieve(r.Context(), query, jazmem.SearchOptions{Limit: limit})
 	if err != nil {

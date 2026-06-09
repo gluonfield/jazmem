@@ -336,7 +336,7 @@ func TestAgenticSearchReturnsAnswerWithCitations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	response, err := mem.AgenticSearch(context.Background(), "Leeroo", AgenticOptions{Limit: 1})
+	response, err := mem.AgenticSearch(context.Background(), "Leeroo", AgenticOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

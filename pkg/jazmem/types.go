@@ -33,9 +33,7 @@ type SearchOptions struct {
 	Limit int `json:"limit,omitempty"`
 }
 
-type AgenticOptions struct {
-	Limit int `json:"limit,omitempty"`
-}
+type AgenticOptions struct{}
 
 type Match struct {
 	Chunk   int     `json:"chunk"`
