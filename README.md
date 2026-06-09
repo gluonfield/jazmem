@@ -117,18 +117,18 @@ jazmem "what connects Alice and Widget Co"
 jazmem eval
 ```
 
-`--agentic` calls the configured OpenAI-compatible provider and requires `JAZMEM_API_KEY`. It uses an internal context budget, so `--limit` does not control agentic retrieval. `jazmem` loads `.env` from the current tree when present, including `jaz/backend/.env` in this workspace.
+`--agentic` calls the configured OpenAI-compatible provider and requires the provider's API key. It uses an internal context budget, so `--limit` does not control agentic retrieval. `jazmem` loads `.env` from the current tree when present, including `jaz/backend/.env` in this workspace.
 
 LLM provider settings:
 
 ```bash
-export JAZMEM_PROVIDER_ENDPOINT="https://openrouter.ai/api/v1"
-export JAZMEM_API_KEY="..."
-export JAZMEM_MODEL="openai/gpt-5.4-mini"
-export JAZMEM_REASONING_EFFORT="medium"
+export PROVIDER_ENDPOINT="https://openrouter.ai/api/v1"
+export OPENROUTER_API_KEY="..."
+export MODEL="openai/gpt-5.4-mini"
+export REASONING_EFFORT="medium"
 ```
 
-`JAZMEM_PROVIDER_ENDPOINT` defaults to `https://openrouter.ai/api/v1`; `JAZMEM_MODEL` defaults to `openai/gpt-5.4-mini`. `JAZMEM_REASONING_EFFORT` is optional and is sent as `reasoning_effort` when set.
+`PROVIDER_ENDPOINT` defaults to `https://openrouter.ai/api/v1`; `MODEL` defaults to `openai/gpt-5.4-mini`. `REASONING_EFFORT` is optional and is sent as `reasoning_effort` when set. OpenRouter uses `OPENROUTER_API_KEY`; OpenAI uses `OPENAI_API_KEY`.
 
 Read pages:
 
@@ -325,7 +325,7 @@ returns `AgenticResponse`:
 }
 ```
 
-This is provider-backed synthesis over retrieved markdown evidence. Raw retrieval remains deterministic and free; `--agentic` requires `JAZMEM_API_KEY` and uses its own retrieval budget instead of the CLI `--limit`.
+This is provider-backed synthesis over retrieved markdown evidence. Raw retrieval remains deterministic and free; `--agentic` requires the configured provider's key such as `OPENROUTER_API_KEY` or `OPENAI_API_KEY`, and uses its own retrieval budget instead of the CLI `--limit`.
 
 Eval:
 

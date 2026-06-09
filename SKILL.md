@@ -84,14 +84,14 @@ jazmem --agentic --text "what is open for Alice"
 
 Raw search is deterministic and free. It uses title/alias candidates, BM25 chunks with per-page max-pool, typed relationship retrieval, and one-hop memlink/backlink expansion.
 
-`--agentic` calls the configured OpenAI-compatible provider and requires `JAZMEM_API_KEY`. It uses its own internal context budget; do not use `--limit` to tune agentic retrieval. Use raw search when deciding which pages to read or edit.
+`--agentic` calls the configured OpenAI-compatible provider and requires that provider's key, such as `OPENROUTER_API_KEY` for OpenRouter or `OPENAI_API_KEY` for OpenAI. It uses its own internal context budget; do not use `--limit` to tune agentic retrieval. Use raw search when deciding which pages to read or edit.
 
 Provider env:
 
-- `JAZMEM_PROVIDER_ENDPOINT`
-- `JAZMEM_API_KEY`
-- `JAZMEM_MODEL`
-- `JAZMEM_REASONING_EFFORT`
+- `PROVIDER_ENDPOINT`
+- `OPENROUTER_API_KEY` or `OPENAI_API_KEY`, based on `PROVIDER_ENDPOINT`
+- `MODEL`
+- `REASONING_EFFORT`
 
 Search strategy:
 

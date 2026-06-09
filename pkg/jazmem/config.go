@@ -61,25 +61,54 @@ func ResolveConfig(cfg Config) Config {
 	cfg.Root = root
 	cfg.DBPath = cleanPath(dbPath)
 
-	if strings.TrimSpace(cfg.APIKey) == "" {
-		cfg.APIKey = strings.TrimSpace(os.Getenv("JAZMEM_API_KEY"))
-	}
 	if strings.TrimSpace(cfg.Model) == "" {
-		cfg.Model = strings.TrimSpace(os.Getenv("JAZMEM_MODEL"))
+		cfg.Model = firstEnv("MODEL", "JAZMEM_MODEL")
 	}
 	if strings.TrimSpace(cfg.Model) == "" {
 		cfg.Model = defaultModel
 	}
 	if strings.TrimSpace(cfg.ProviderEndpoint) == "" {
-		cfg.ProviderEndpoint = strings.TrimSpace(os.Getenv("JAZMEM_PROVIDER_ENDPOINT"))
+		cfg.ProviderEndpoint = firstEnv("PROVIDER_ENDPOINT", "JAZMEM_PROVIDER_ENDPOINT")
 	}
 	if strings.TrimSpace(cfg.ProviderEndpoint) == "" {
 		cfg.ProviderEndpoint = defaultProviderEndpoint
 	}
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		cfg.APIKey = providerAPIKey(cfg.ProviderEndpoint)
+	}
 	if strings.TrimSpace(cfg.ReasoningEffort) == "" {
-		cfg.ReasoningEffort = strings.TrimSpace(os.Getenv("JAZMEM_REASONING_EFFORT"))
+		cfg.ReasoningEffort = firstEnv("REASONING_EFFORT", "JAZMEM_REASONING_EFFORT")
 	}
 	return cfg
+}
+
+func firstEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func providerAPIKey(endpoint string) string {
+	key := providerAPIKeyEnv(endpoint)
+	if key == "" {
+		return ""
+	}
+	return strings.TrimSpace(os.Getenv(key))
+}
+
+func providerAPIKeyEnv(endpoint string) string {
+	endpoint = strings.ToLower(strings.TrimSpace(endpoint))
+	switch {
+	case strings.Contains(endpoint, "openrouter"):
+		return "OPENROUTER_API_KEY"
+	case strings.Contains(endpoint, "api.openai.com"):
+		return "OPENAI_API_KEY"
+	default:
+		return ""
+	}
 }
 
 func cleanPath(path string) string {

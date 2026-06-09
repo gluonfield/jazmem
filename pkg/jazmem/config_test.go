@@ -48,14 +48,14 @@ func TestResolveConfigUsesEnvOverrides(t *testing.T) {
 }
 
 func TestResolveConfigUsesProviderEnv(t *testing.T) {
-	t.Setenv("JAZMEM_API_KEY", "test-key")
-	t.Setenv("JAZMEM_MODEL", "test-model")
-	t.Setenv("JAZMEM_PROVIDER_ENDPOINT", "https://provider.example/v1")
-	t.Setenv("JAZMEM_REASONING_EFFORT", "medium")
+	t.Setenv("OPENROUTER_API_KEY", "test-key")
+	t.Setenv("MODEL", "test-model")
+	t.Setenv("PROVIDER_ENDPOINT", "https://provider.example/v1")
+	t.Setenv("REASONING_EFFORT", "medium")
 
 	cfg := ResolveConfig(Config{})
-	if cfg.APIKey != "test-key" {
-		t.Fatalf("api key = %q, want test-key", cfg.APIKey)
+	if cfg.APIKey != "" {
+		t.Fatalf("api key = %q, want empty for unrecognized provider endpoint", cfg.APIKey)
 	}
 	if cfg.Model != "test-model" {
 		t.Fatalf("model = %q, want test-model", cfg.Model)
@@ -65,6 +65,24 @@ func TestResolveConfigUsesProviderEnv(t *testing.T) {
 	}
 	if cfg.ReasoningEffort != "medium" {
 		t.Fatalf("reasoning effort = %q, want medium", cfg.ReasoningEffort)
+	}
+}
+
+func TestResolveConfigUsesOpenRouterAPIKeyForOpenRouterEndpoint(t *testing.T) {
+	t.Setenv("OPENROUTER_API_KEY", "openrouter-key")
+
+	cfg := ResolveConfig(Config{})
+	if cfg.APIKey != "openrouter-key" {
+		t.Fatalf("api key = %q, want openrouter-key", cfg.APIKey)
+	}
+}
+
+func TestResolveConfigUsesOpenAIAPIKeyForOpenAIEndpoint(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "openai-key")
+
+	cfg := ResolveConfig(Config{ProviderEndpoint: "https://api.openai.com/v1"})
+	if cfg.APIKey != "openai-key" {
+		t.Fatalf("api key = %q, want openai-key", cfg.APIKey)
 	}
 }
 

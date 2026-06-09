@@ -57,13 +57,13 @@ func (c *Client) CompleteJSON(ctx context.Context, req Request) (Response, error
 		return Response{}, errors.New("LLM provider client is not configured")
 	}
 	if c.cfg.APIKey == "" {
-		return Response{}, errors.New("JAZMEM_API_KEY is required for this jazmem command")
+		return Response{}, fmt.Errorf("%s is required for provider-backed jazmem commands", providerAPIKeyEnv(c.cfg.Endpoint))
 	}
 	if c.cfg.Model == "" {
-		return Response{}, errors.New("JAZMEM_MODEL is required for this jazmem command")
+		return Response{}, errors.New("MODEL is required for provider-backed jazmem commands")
 	}
 	if c.cfg.Endpoint == "" {
-		return Response{}, errors.New("JAZMEM_PROVIDER_ENDPOINT is required for this jazmem command")
+		return Response{}, errors.New("PROVIDER_ENDPOINT is required for provider-backed jazmem commands")
 	}
 	if len(req.Messages) == 0 {
 		return Response{}, errors.New("LLM messages are empty")
@@ -132,6 +132,18 @@ func (c *Client) CompleteJSON(ctx context.Context, req Request) (Response, error
 		model = c.cfg.Model
 	}
 	return Response{Content: ExtractJSONObject(parsed.Choices[0].Message.Content), Model: model}, nil
+}
+
+func providerAPIKeyEnv(endpoint string) string {
+	endpoint = strings.ToLower(strings.TrimSpace(endpoint))
+	switch {
+	case strings.Contains(endpoint, "openrouter"):
+		return "OPENROUTER_API_KEY"
+	case strings.Contains(endpoint, "api.openai.com"):
+		return "OPENAI_API_KEY"
+	default:
+		return "provider API key"
+	}
 }
 
 func ExtractJSONObject(content string) string {
