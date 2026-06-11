@@ -2,3 +2,22 @@ bin/
 coverage.out
 *.test
 .DS_Store
+
+# Local secrets and provider config.
+.env
+.env.*
+!.env.example
+
+# Local jazmem/runtime state. Markdown memory is not stored in this repo.
+.jazmem/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+
+# Build and diagnostic output.
+dist/
+build/
+tmp/
+*.log
+*.prof
