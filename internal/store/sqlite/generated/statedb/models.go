@@ -3,3 +3,10 @@
 //   sqlc v1.31.1
 
 package statedb
+
+type SchedulerState struct {
+	Task        string `json:"task"`
+	LastRunAtMs int64  `json:"last_run_at_ms"`
+	LastStatus  string `json:"last_status"`
+	LastError   string `json:"last_error"`
+}

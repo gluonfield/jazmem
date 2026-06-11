@@ -13,11 +13,11 @@ const searchLike = `-- name: SearchLike :many
 SELECT c.slug,
 	c.chunk_index,
 	p.title,
-	substr(c.body, 1, 240) AS snippet,
+	substr(c.body, 1, 600) AS snippet,
 	CAST(CASE WHEN p.title LIKE ? THEN -0.5 ELSE 0.0 END AS REAL) AS score
 FROM chunks c
 JOIN pages p ON p.slug = c.slug
-WHERE p.title LIKE ? OR c.body LIKE ?
+WHERE (p.title LIKE ? OR c.body LIKE ?) AND c.slug NOT LIKE 'dreams/%'
 ORDER BY score, p.title, c.chunk_index
 LIMIT ?
 `
@@ -80,7 +80,7 @@ WITH candidates AS (
 			ELSE 10.00
 		END AS score
 	FROM pages p
-	WHERE lower(p.title) = ? OR lower(p.title) LIKE ?
+	WHERE (lower(p.title) = ? OR lower(p.title) LIKE ?) AND p.slug NOT LIKE 'dreams/%'
 	UNION ALL
 	SELECT a.slug,
 		CASE
@@ -89,7 +89,7 @@ WITH candidates AS (
 			ELSE 10.00
 		END AS score
 	FROM aliases a
-	WHERE a.normalized_alias = ? OR a.normalized_alias LIKE ?
+	WHERE (a.normalized_alias = ? OR a.normalized_alias LIKE ?) AND a.slug NOT LIKE 'dreams/%'
 ),
 ranked AS (
 	SELECT slug, CAST(MIN(score) AS REAL) AS score

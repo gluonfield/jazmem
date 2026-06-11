@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+// ErrorRetryBackoff is how long a failed run waits before retrying. Failures
+// do not consume a task's calendar slot: a dream that fails at 03:46 because
+// the machine was asleep retries shortly after wake instead of waiting a day.
+const ErrorRetryBackoff = 30 * time.Minute
+
 type Task struct {
 	Name     string
 	Interval time.Duration
@@ -51,11 +56,11 @@ func (s *Scheduler) runDue(ctx context.Context) error {
 		if task.Name == "" || task.Run == nil {
 			continue
 		}
-		lastRun, _, err := s.lastRun(ctx, task.Name)
+		lastRun, lastStatus, err := s.lastRun(ctx, task.Name)
 		if err != nil {
 			return err
 		}
-		if !taskDue(task, lastRun, now) {
+		if !taskDue(task, lastRun, lastStatus, now) {
 			continue
 		}
 		err = task.Run(ctx)
@@ -77,7 +82,10 @@ func (s *Scheduler) runDue(ctx context.Context) error {
 	return nil
 }
 
-func taskDue(task Task, lastRun, now time.Time) bool {
+func taskDue(task Task, lastRun time.Time, lastStatus string, now time.Time) bool {
+	if TaskErrored(lastStatus) && now.Sub(lastRun) >= ErrorRetryBackoff {
+		return true
+	}
 	if task.Due != nil {
 		return task.Due(lastRun, now)
 	}
@@ -85,6 +93,10 @@ func taskDue(task Task, lastRun, now time.Time) bool {
 		return lastRun.IsZero()
 	}
 	return lastRun.IsZero() || now.Sub(lastRun) >= task.Interval
+}
+
+func TaskErrored(status string) bool {
+	return status != "" && status != "ok"
 }
 
 func (s *Scheduler) lastRun(ctx context.Context, task string) (time.Time, string, error) {

@@ -2,6 +2,14 @@
 
 Use this reference when storing data, creating pages, editing canonical pages, deciding where a memory belongs, or handling citations/relationships.
 
+## Memory Horizons
+
+`LONG_TERM.md` and `SHORT_TERM.md` live at the memory root and are injected into every jaz turn alongside today's `daily/` page. They are not indexed pages.
+
+- `LONG_TERM.md`: dream-maintained, agents read-only. To surface something for it, record it in daily/ or inbox/ with a citation; dream promotes what recurs or was directly stated.
+- `SHORT_TERM.md`: keep it true about the present. When focus, active projects, or open loops change, replace the affected lines immediately — do not append a history; daily/ is the history.
+- `daily/YYYY-MM-DD.md`: append entries as the day unfolds under `## Notes` / `## Open Loops` (the scheduler creates the skeleton; create it with those sections if missing). Amend a bullet only when it was wrong or superseded the same day.
+
 ## Write Workflow
 
 Agents store data by editing raw markdown files. Jazmem indexes it.
@@ -91,6 +99,23 @@ Slug rules:
 - Examples: `people/alice-smith`, `projects/jazmem`, `concepts/brain-first-memory`.
 - Slug maps to `<root>/<slug>.md`.
 
+## Aliases
+
+Exact title/alias matches are the strongest retrieval signal. Aliases are not optional metadata; they decide whether the page is findable.
+
+- On page creation, record every name variant seen so far in `aliases:` frontmatter: nicknames, short forms, initials, legal names, handles, product names.
+- Keep `title` canonical; variants belong in `aliases`.
+- When a reasonable search variant fails to find an existing page, add that variant as an alias and run `jazmem index`. This is how retrieval self-heals.
+- Do not add generic words as aliases (`engineer`, `the company`); an alias must point to this page specifically.
+
+```md
+---
+title: Alice Smith
+type: people
+aliases: [Alice, A. Smith, alicedev]
+---
+```
+
 ## Canonical Page Shape
 
 ```md
@@ -126,13 +151,13 @@ aliases: [Alice]
 
 Recommended sections:
 
-- People: `Current`, `Preferences`, `Relationships`, `Open Loops`, `Sources`
-- Companies: `Current`, `People`, `Projects`, `Open Loops`, `Sources`
+- People: `Current`, `Preferences`, `Relationships`, `History`, `Open Loops`, `Sources`
+- Companies: `Current`, `People`, `Projects`, `History`, `Open Loops`, `Sources`
 - Projects: `State`, `Decisions`, `Design`, `Open Loops`, `Sources`
 - Concepts: `Summary`, `Use When`, `Examples`, `Related`, `Sources`
 - Agent traces: `Problem`, `Approach`, `Fix`, `Lessons`, `Sources`
 
-Keep pages scannable. Prefer bullets for factual memory. Avoid long unsourced prose.
+Keep pages scannable. Prefer bullets for factual memory. Avoid long unsourced prose. When a page grows past roughly 150 lines, move detail into a `sources/` page and keep a summarized bullet with a wikilink to it.
 
 ## Citations
 
@@ -147,6 +172,8 @@ Citation forms:
 - Agent work: `[Source: [[sources/agent/2026-06-08-jazmem-implementation]], 2026-06-08]`
 - Web/external: `[Source: Publication, URL, 2026-06-08]`
 
+Always use absolute dates in citations (`2026-06-09`), never relative ones like "yesterday" or "last week".
+
 Source precedence when sources conflict:
 
 1. User direct statements
@@ -155,6 +182,23 @@ Source precedence when sources conflict:
 4. External sources
 
 When memory conflicts, do not silently choose one. Preserve both claims with dates and sources, then flag the contradiction.
+
+## Updating Facts Over Time
+
+Canonical pages describe the present. When a fact changes:
+
+1. Update the `## Current` bullet in place with the new fact, source, and date.
+2. Move the displaced fact to `## History` with a date range:
+
+```md
+## History
+
+- Ran engineering at Acme (2024 to 2026-05). [Source: User, chat, 2026-06-09]
+```
+
+3. Never leave a known-stale fact in `## Current`.
+
+When a relationship ends, move its bullet from `## Relationships` to `## History` with a date range. Typed edges are only indexed from `## Relationships`, so the move drops the edge while the record survives. Update both pages of a reciprocal relationship.
 
 ## Memlinks And Relationships
 

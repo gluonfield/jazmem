@@ -26,3 +26,8 @@ VALUES (?, ?, ?, ?);
 SELECT last_run_at_ms, last_status, last_error
 FROM scheduler_state
 WHERE task = ?;
+
+-- name: ListTaskStates :many
+SELECT task, last_run_at_ms, last_status, last_error
+FROM scheduler_state
+ORDER BY task;

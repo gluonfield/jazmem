@@ -34,6 +34,9 @@ func Open(cfg Config) (*Memory, error) {
 	root := cfg.Root
 	dbPath := cfg.DBPath
 	fs := memfs.New(root)
+	if _, err := fs.EnsureHorizonFiles(); err != nil {
+		return nil, err
+	}
 	if err := fs.EnsureLayout(); err != nil {
 		return nil, err
 	}

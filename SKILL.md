@@ -1,192 +1,105 @@
 ---
 name: jazmem
-description: Use jazmem CLI and markdown memory. Trigger when searching, reading, citing, storing, organizing, reindexing, evaluating, dreaming, or maintaining durable personal memory in jazmem.
+description: Use jazmem CLI and markdown memory. Trigger when searching, reading, citing, storing, organizing, reindexing, evaluating, dreaming, or maintaining durable personal memory in jazmem, including the LONG_TERM/SHORT_TERM/daily memory horizons.
 metadata:
   short-description: Search and maintain jazmem memory
 ---
 
 # Jazmem
 
-Jazmem is a markdown-first personal memory system. Markdown files are the source of truth; SQLite is only a rebuildable index for search, aliases, links, chunks, and scheduler state.
+Markdown-first personal memory. Markdown files are the source of truth; SQLite is a rebuildable index. Default root `~/.jaz/memory`, db `~/.jaz/jazmem.sqlite` (override: `JAZMEM_ROOT`, `JAZMEM_DB`, `--root`, `--db`).
 
-Use this skill whenever personal context may matter, when the user asks to remember/store/file something, or after substantial work produces durable knowledge that should not live only in chat.
+The CLI auto-connects to a running server (jaz at `:5299/jazmem`, or jazmem-server at `:9477`) so the server stays the single index writer. Explicit storage (`--root`, `--db`, `JAZMEM_ROOT`, `JAZMEM_DB`) uses local access unless `--server URL`/`JAZMEM_SERVER` pins a matching server; `--local` always forces direct access. Editing markdown files always works directly — only index/search/dream operations route through the server.
+
+## Memory Horizons
+
+Three files are injected into every jaz turn. Know who writes what:
+
+| Surface | Holds | You (agent) | Dream (nightly) |
+|---|---|---|---|
+| `LONG_TERM.md` | identity, goals, standing preferences, key people | **read-only** | sole writer; facts must recur or be directly stated |
+| `SHORT_TERM.md` | current focus, active projects, open loops | **update in place, live**, when the present changes | prunes stale entries |
+| `daily/YYYY-MM-DD.md` | raw log of today | **append as you go**, mid-session, not at session end | reads, never writes |
+
+Rules:
+
+- SHORT_TERM.md says what is true about the present and gets overwritten; daily/ says what happened and never does.
+- Capture immediately when you learn something durable: append to today's daily page, update SHORT_TERM.md if focus/loops changed, run `jazmem index`. Memory is a behavior, not a backup.
+- The current daily page is in your context — append what's new, amend the bullet that changed, never rewrite the page.
+- Never edit LONG_TERM.md; if something belongs there, it will earn its way in via dream. Mention it in daily/ with a citation.
 
 ## Core Rules
 
-- Check jazmem before answering questions about people, projects, preferences, prior decisions, relationships, open loops, and "what do we know" topics.
-- Ground memory-based claims in citations. If memory is missing or thin, say so.
-- Agents store data by editing raw markdown files, then running `jazmem index`.
-- Never store canonical facts only in SQLite and never edit SQLite/FTS/chunk/link tables directly.
-- Preserve the user's original wording in raw notes and cite every durable fact promoted to canonical pages.
-- Store uncertain material in `inbox/` or `dreams/review/`; promote only durable, sourced facts to canonical pages.
-- Use wikilinks for durable references and relationships.
-- After writing/editing markdown: run `jazmem index`, then verify with search.
-
-## Defaults
-
-No flags:
-
-```bash
-jazmem doctor
-```
-
-uses:
-
-- root: `~/.jaz/memory`
-- db: `~/.jaz/jazmem.sqlite`
-
-Overrides:
-
-- `JAZMEM_ROOT`
-- `JAZMEM_DB`
-- `--root`
-- `--path` for `init`
-- `--db`
-
-Bootstrap memory:
-
-```bash
-jazmem init
-jazmem init /path/to/memory
-```
-
-## Operating Loop
-
-Use this sequence for most memory work:
-
-1. Search first: `jazmem "<names concrete nouns question>"`
-2. Read full pages only when search results show they matter: `jazmem get --raw <slug>`
-3. Answer from retrieved context, citing slugs and source lines when possible.
-4. If the user gives new information, write it into the appropriate markdown file with exact wording and citation.
-5. Promote only durable, sourced facts to canonical pages.
-6. Run `jazmem index`.
-7. Verify retrieval with a search that should find the new memory.
-8. Commit with plain git only if the memory root is a git repo and the user explicitly asks.
-
-For detailed storage/page-shape rules, read [references/writing-memory.md](references/writing-memory.md).
+- Check jazmem before answering about people, projects, preferences, decisions, relationships, open loops, "what do we know".
+- Ground claims in citations; absolute dates only (`2026-06-10`, never "yesterday").
+- Write declarative facts, not instructions: "User prefers concise updates" ✓, "Always be concise" ✗.
+- If a fact will be stale in 7 days, it belongs in daily/, not on a canonical page. No PR numbers, SHAs, "fixed bug X". Reusable procedures belong in skills, not memory.
+- Store data by editing markdown, then `jazmem index`. Never treat SQLite as truth or edit it directly.
+- Record every known name variant in `aliases:` frontmatter — exact title/alias match is the strongest retrieval signal.
+- Keep `## Current` current: displaced facts move to `## History` with date ranges; ended relationships move out of `## Relationships` (that drops the typed edge).
+- Uncertain or raw material goes to `inbox/`, exact wording preserved, not to canonical pages.
 
 ## Search
 
-Raw search:
+```bash
+jazmem ask "what do we know about Alice"   # ANSWER: LLM synthesis + citations + gaps
+jazmem ask --deep "..."                    # + bigger budget + gap-driven second round
+jazmem "Alice Acme open loops"             # raw retrieval: ranked pages + chunks, free
+jazmem search --limit 5 --text "..."       # rendered text
+jazmem "who works at Acme"                 # typed-edge relational forms
+jazmem "what connects Alice and Riley"
+jazmem search --deep "..."                 # escalation: wider pool + two-hop links
+```
+
+`ask` answers a question; raw search finds pages. Use raw when picking pages to read or edit; use `ask` when answering the user. (`jazmem --agentic` is the JSON form of ask.)
+
+Raw results carry `modified_at` (staleness) and, only when it matters, `via`: `relationship` = typed-edge match, `link` = neighbor pulled in by expansion (not a direct match). The slug prefix is the lane — canonical lanes are curated, `inbox/`/`sources/` are raw. `--limit` does not affect ask/agentic; `--deep` is the only compute knob — an escalation, not a default.
+
+### When Search Misses
+
+1. Reformulate with concrete nouns, not question words.
+2. Try name variants; try the relational forms.
+3. `jazmem search --deep --limit 20 "<query>"`.
+4. `jazmem get --raw <slug>` the closest hit; follow its wikilinks, `links`, and `backlinks`.
+5. Only then say memory is missing. If a legitimate variant failed, add it as an alias and reindex.
+
+## Read and Write
 
 ```bash
-jazmem "Alice Riley Acme"
-jazmem search --limit 5 "Alice open loops"
-jazmem --text "what is open for Alice"
+jazmem get people/alice        # page JSON incl. links/backlinks (graph neighborhood)
+jazmem get --raw people/alice  # raw markdown
+jazmem file people/alice       # path for editing; not-found returns suggestions
 ```
 
-Agentic synthesis:
+Write path: search first → `jazmem file <slug>` → edit markdown → for new pages create `<root>/<slug>.md` with frontmatter, H1, aliases → cite every fact `[Source: ..., YYYY-MM-DD]` → close with `jazmem index && jazmem search "<verifying query>"`. New canonical pages must pass the notability gate; when unsure, `inbox/` instead.
 
-```bash
-jazmem --agentic "what do we know about Alice"
-jazmem --agentic --text "what is open for Alice"
-```
+Lanes: `people/ companies/ projects/ concepts/ notes/` (canonical) · `daily/ inbox/ sources/{email,chat,agent}/` (raw) · `dreams/{runs,review}/` (dream's).
 
-Raw search is deterministic and free. It uses title/alias candidates, BM25 chunks with per-page max-pool, typed relationship retrieval, and one-hop memlink/backlink expansion.
-
-`--agentic` calls the configured OpenAI-compatible provider and requires that provider's key, such as `OPENROUTER_API_KEY` for OpenRouter or `OPENAI_API_KEY` for OpenAI. It uses its own internal context budget; do not use `--limit` to tune agentic retrieval. Use raw search when deciding which pages to read or edit.
-
-Provider env:
-
-- `PROVIDER_ENDPOINT`
-- `OPENROUTER_API_KEY` or `OPENAI_API_KEY`, based on `PROVIDER_ENDPOINT`
-- `MODEL`
-- `REASONING_EFFORT`
-
-Search strategy:
-
-- Person context: `jazmem "Alice preferences decisions open loops"`
-- Relationship lookup: `jazmem "Alice Riley friends"`
-- Typed relationship lookup: `jazmem "who works at Acme"`
-- Connection lookup: `jazmem "what connects Alice and Riley"`
-- Project context: `jazmem "jazmem sqlite bm25 vector"`
-- Source/agent trace: `jazmem "agent solved problem failure fix"`
-- User preference: `jazmem "user preference writing style"`
-
-For response schemas, server endpoints, eval, and maintenance commands, read [references/commands.md](references/commands.md).
-
-When MCP tools are available, prefer them over shell commands for read-only retrieval:
-
-- `jazmem_search`
-- `jazmem_get`
-
-MCP is served by `jazmem-server` at `http://127.0.0.1:9477/mcp`; there is no separate jazmem MCP binary. `jazmem_search` is agentic by default and returns a cited answer/gaps. Use `jazmem_get` to read raw markdown pages by slug.
-
-MCP is read-only. Indexing, dreaming, and link hygiene are CLI/server/scheduler operations, not MCP tools.
-
-## Read Memory
-
-```bash
-jazmem get people/alice
-jazmem get --raw people/alice
-jazmem get --body people/alice
-jazmem file people/alice
-```
-
-Use `jazmem file <slug>` before manual edits.
-
-If a slug is not found, `jazmem file` and `jazmem get` return similar slugs:
-
-```text
-jazmem: not found: people/alice
-suggestions:
-- people/alice-bentick (Alice Bentick)
-```
-
-Retry with the best matching slug before concluding memory is missing.
-
-## Write Memory
-
-Default write path:
-
-1. Search for existing pages.
-2. Resolve the file path with `jazmem file <slug>`.
-3. Edit markdown directly.
-4. For new pages, create `<root>/<slug>.md` with frontmatter and an H1.
-5. Add citations and wikilinks.
-6. Run `jazmem index`.
-7. Verify search.
-8. Commit with plain git only when explicitly needed.
-
-Canonical page directories:
-
-- `people/`, `companies/`, `projects/`, `concepts/`, `notes/`
-- `daily/`, `inbox/`, `sources/email/`, `sources/chat/`, `sources/agent/`
-- `dreams/runs/`, `dreams/review/`
-
-Use `## Relationships` for stable relationship bullets. Jazmem indexes typed relationship edges only from explicit wikilinks inside that section.
+Typed relationships index only from `## Relationships` wikilink bullets with supported labels (`works at`, `works with`, `founder`, `invested in`, `advisor`, `friend`):
 
 ```md
 ## Relationships
-
-- [[companies/acme]] - works at. [Source: User, chat, 2026-06-08]
-- [[people/riley]] - friend. [Source: [[inbox/2026-06-08-lunch-note]], 2026-06-08]
+- [[companies/acme]] - works at. [Source: User, chat, 2026-06-10]
 ```
 
-Do not create reciprocal relationship bullets for mere mentions. Do create them for high-confidence durable relationships such as friend, works with, founder, advisor, investor, or collaborator.
+Details: [references/writing-memory.md](references/writing-memory.md). Commands/schemas: [references/commands.md](references/commands.md).
+
+## MCP Tools
+
+Served by jaz at `http://127.0.0.1:5299/mcp/jazmem` (or standalone `jazmem-server` at `:9477/mcp`). Read-only — writes happen by editing markdown.
+
+- `jazmem_search`: agentic cited answer; `deep: true` when thin.
+- `jazmem_search_raw`: deterministic retrieval (`limit`, `deep`); drives your own search→get→follow-links loop.
+- `jazmem_get`: raw markdown + links/backlinks + near-miss suggestions.
 
 ## Maintenance
 
-```bash
-jazmem index
-jazmem doctor
-jazmem eval
-jazmem dream
-jazmem link-hygiene
-```
-
-- `jazmem index`: rebuilds SQLite from markdown.
-- `jazmem doctor`: checks root/db/index counts.
-- `jazmem eval`: fixed retrieval eval, no LLM.
-- `jazmem dream`: provider-backed consolidation; writes run/review pages and only promotes validated cited bullets.
-- `jazmem link-hygiene`: generates relationship proposals in `dreams/review/`.
+`jazmem index` (rebuild after edits) · `jazmem doctor` (counts) · `jazmem eval` (fixed retrieval eval, no LLM) · `jazmem dream` (consolidation: promotes cited bullets, maintains LONG_TERM/SHORT_TERM) · `jazmem link-hygiene` (relationship proposals → review). The jazmem scheduler runs reindex/dream/hygiene automatically inside jaz.
 
 ## Anti-Patterns
 
-- Answering from general knowledge when jazmem has relevant memory.
-- Writing canonical facts without sources.
-- Paraphrasing raw user ideas instead of preserving wording.
-- Creating pages for one-off, non-notable entities.
-- Burying durable relationships in prose instead of `## Relationships`.
-- Forgetting `jazmem index` after manual markdown edits.
-- Treating SQLite as source of truth.
+- Answering from general knowledge when jazmem has memory; concluding "missing" after one search.
+- Deferring capture to session end; editing LONG_TERM.md directly.
+- Unsourced facts; relative dates; imperative phrasing; artifact IDs that rot in a week.
+- Alias-less new pages; stale `## Current` bullets; relationships buried in prose.
+- Forgetting `jazmem index`; treating SQLite as truth; `--deep` on every query.

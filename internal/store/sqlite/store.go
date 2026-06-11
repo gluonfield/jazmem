@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/entitydb"
+	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/graphdb"
 	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/searchdb"
 	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/statedb"
 
@@ -20,6 +21,7 @@ type Store struct {
 	entityQ entitydb.Querier
 	searchQ searchdb.Querier
 	stateQ  statedb.Querier
+	graphQ  graphdb.Querier
 }
 
 type IndexData struct {
@@ -82,6 +84,8 @@ type SearchResult struct {
 	ChunkIndex int     `json:"chunk_index"`
 	Snippet    string  `json:"snippet"`
 	Score      float64 `json:"score"`
+	// Via names the retrieval arm that produced the row: relationship, title, text, link.
+	Via string `json:"via,omitempty"`
 }
 
 type DoctorReport struct {
@@ -109,6 +113,7 @@ func Open(path string) (*Store, error) {
 		entityQ: entitydb.New(db),
 		searchQ: searchdb.New(db),
 		stateQ:  statedb.New(db),
+		graphQ:  graphdb.New(db),
 	}
 	if err := store.configure(); err != nil {
 		_ = db.Close()

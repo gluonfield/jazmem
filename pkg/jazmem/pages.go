@@ -5,6 +5,7 @@ import (
 
 	"github.com/gluonfield/jazmem/internal/dream"
 	"github.com/gluonfield/jazmem/internal/memfs"
+	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
 )
 
 func (m *Memory) GetPage(ctx context.Context, slug string) (Page, error) {
@@ -17,7 +18,22 @@ func (m *Memory) GetPage(ctx context.Context, slug string) (Page, error) {
 	if err != nil {
 		return Page{}, m.notFoundError(slug, err)
 	}
-	return publicPage(page), nil
+	out := publicPage(page)
+	// Graph neighborhood comes from the index; a stale or empty index should
+	// not make the page itself unreadable.
+	if outgoing, incoming, err := m.store.PageLinks(ctx, out.Slug); err == nil {
+		out.Links = publicLinkRefs(outgoing)
+		out.Backlinks = publicLinkRefs(incoming)
+	}
+	return out, nil
+}
+
+func publicLinkRefs(refs []sqlitestore.LinkRef) []LinkRef {
+	out := make([]LinkRef, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, LinkRef{Slug: ref.Slug, Type: ref.Type, Source: ref.Source})
+	}
+	return out
 }
 
 func (m *Memory) Reindex(ctx context.Context, _ ReindexOptions) (Report, error) {
@@ -41,14 +57,16 @@ func (m *Memory) Dream(ctx context.Context, opts DreamOptions) (DreamReport, err
 		return DreamReport{}, err
 	}
 	return DreamReport{
-		RunSlug:     report.RunSlug,
-		ReviewSlug:  report.ReviewSlug,
-		InputSlugs:  report.InputSlugs,
-		Promoted:    report.Promoted,
-		ReviewItems: report.ReviewItems,
-		Skipped:     report.Skipped,
-		ModelUsed:   report.ModelUsed,
-		Warnings:    report.Warnings,
+		RunSlug:          report.RunSlug,
+		ReviewSlug:       report.ReviewSlug,
+		InputSlugs:       report.InputSlugs,
+		Promoted:         report.Promoted,
+		ReviewItems:      report.ReviewItems,
+		Skipped:          report.Skipped,
+		LongTermUpdated:  report.LongTermUpdated,
+		ShortTermUpdated: report.ShortTermUpdated,
+		ModelUsed:        report.ModelUsed,
+		Warnings:         report.Warnings,
 	}, nil
 }
 

@@ -27,13 +27,27 @@ type Page struct {
 	Body        string         `json:"body"`
 	Raw         string         `json:"raw"`
 	ModifiedAt  time.Time      `json:"modified_at"`
+	Links       []LinkRef      `json:"links,omitempty"`
+	Backlinks   []LinkRef      `json:"backlinks,omitempty"`
+}
+
+// LinkRef is one edge of a page's graph neighborhood. Type is the link type
+// (reference, mention, or a typed relationship such as works_at); Source is
+// how it was derived (explicit, mention, relationship).
+type LinkRef struct {
+	Slug   string `json:"slug"`
+	Type   string `json:"type"`
+	Source string `json:"source"`
 }
 
 type SearchOptions struct {
-	Limit int `json:"limit,omitempty"`
+	Limit int  `json:"limit,omitempty"`
+	Deep  bool `json:"deep,omitempty"`
 }
 
-type AgenticOptions struct{}
+type AgenticOptions struct {
+	Deep bool `json:"deep,omitempty"`
+}
 
 type Match struct {
 	Chunk   int     `json:"chunk"`
@@ -42,10 +56,15 @@ type Match struct {
 }
 
 type Result struct {
-	Slug    string  `json:"slug"`
-	Title   string  `json:"title"`
-	Score   float64 `json:"score"`
-	Matches []Match `json:"matches"`
+	Slug  string  `json:"slug"`
+	Title string  `json:"title"`
+	Score float64 `json:"score"`
+	// Via is set only when it changes how the agent should treat the hit:
+	// "relationship" (typed-edge match) or "link" (neighbor pulled in by
+	// expansion, not a direct match). Direct text/title hits carry no via.
+	Via        string    `json:"via,omitempty"`
+	ModifiedAt time.Time `json:"modified_at,omitzero"`
+	Matches    []Match   `json:"matches"`
 }
 
 type SearchStats struct {
@@ -60,7 +79,10 @@ type SearchResponse struct {
 	Warnings []string    `json:"warnings,omitempty"`
 }
 
+// Citation links an answer's [n] markers back to evidence: ID is the marker
+// number used in the answer text.
 type Citation struct {
+	ID    int    `json:"id,omitempty"`
 	Slug  string `json:"slug"`
 	Title string `json:"title,omitempty"`
 	Chunk int    `json:"chunk"`
@@ -95,14 +117,16 @@ type DreamOptions struct {
 }
 
 type DreamReport struct {
-	RunSlug     string   `json:"run_slug"`
-	ReviewSlug  string   `json:"review_slug,omitempty"`
-	InputSlugs  []string `json:"input_slugs"`
-	Promoted    int      `json:"promoted"`
-	ReviewItems int      `json:"review_items"`
-	Skipped     int      `json:"skipped"`
-	ModelUsed   string   `json:"model_used,omitempty"`
-	Warnings    []string `json:"warnings,omitempty"`
+	RunSlug          string   `json:"run_slug"`
+	ReviewSlug       string   `json:"review_slug,omitempty"`
+	InputSlugs       []string `json:"input_slugs"`
+	Promoted         int      `json:"promoted"`
+	ReviewItems      int      `json:"review_items"`
+	Skipped          int      `json:"skipped"`
+	LongTermUpdated  bool     `json:"long_term_updated,omitempty"`
+	ShortTermUpdated bool     `json:"short_term_updated,omitempty"`
+	ModelUsed        string   `json:"model_used,omitempty"`
+	Warnings         []string `json:"warnings,omitempty"`
 }
 
 type EvalCase struct {

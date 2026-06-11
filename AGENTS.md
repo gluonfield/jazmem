@@ -13,4 +13,6 @@
 - Do not create one generated "everything database" package. Each feature should depend only on the generated interface for the concern it actually needs.
 - Generated files under `internal/store/sqlite/generated` are machine-owned. Edit the SQL query files or migrations, then run `go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate`.
 - Handwritten dynamic SQL is acceptable when SQLC would require awkward query construction, especially graph expansion with dynamic seed sets or link-type predicates.
+- Agent-facing response payloads (search results, citations, MCP outputs) must be token-efficient: no field that duplicates information already present (e.g. a `type` field when the slug prefix encodes the lane), and no field that does not change agent behavior. Every response field must earn its tokens.
+- Keep the reading path generous where it matters: chunks target the research-backed 100-400 token range (pack limit 1400 chars in the indexer) and search snippets must carry enough of the chunk to act on (600 chars), because truncated snippets, not chunk size, are the usual cause of a weak reading side.
 - Run `gofmt` and `go test ./...` after code changes that touch Go behavior.

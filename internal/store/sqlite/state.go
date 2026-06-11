@@ -52,6 +52,30 @@ func (s *Store) RecordTask(ctx context.Context, task, status string, runAt time.
 	})
 }
 
+type TaskStateRow struct {
+	Task      string
+	LastRunAt time.Time
+	Status    string
+	Error     string
+}
+
+func (s *Store) ListTaskStates(ctx context.Context) ([]TaskStateRow, error) {
+	rows, err := s.stateQ.ListTaskStates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TaskStateRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, TaskStateRow{
+			Task:      row.Task,
+			LastRunAt: time.UnixMilli(row.LastRunAtMs).UTC(),
+			Status:    row.LastStatus,
+			Error:     row.LastError,
+		})
+	}
+	return out, nil
+}
+
 func (s *Store) TaskState(ctx context.Context, task string) (time.Time, string, error) {
 	row, err := s.stateQ.GetTaskState(ctx, task)
 	if errors.Is(err, sql.ErrNoRows) {

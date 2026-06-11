@@ -71,6 +71,139 @@ func (fs *FileSystem) EnsureLayoutReport() (LayoutReport, error) {
 	return report, nil
 }
 
+const (
+	LongTermFile      = "LONG_TERM.md"
+	ShortTermFile     = "SHORT_TERM.md"
+	LongTermMaxChars  = 2500
+	ShortTermMaxChars = 1500
+	longTermHeading   = "# Long Term Memory"
+	shortTermHeading  = "# Short Term Memory"
+)
+
+var horizonSkeletons = map[string]string{
+	LongTermFile: longTermHeading + `
+
+Identity, goals, standing preferences, key relationships. Maintained nightly by dream; agents treat this file as read-only.
+`,
+	ShortTermFile: shortTermHeading + `
+
+Current focus, active projects, open loops. Agents update entries in place as the present changes; dream prunes stale ones.
+`,
+}
+
+// HorizonFiles are root-level injection surfaces, not pages: they are excluded
+// from page listing/indexing and are read or written whole.
+func HorizonFiles() []string {
+	return []string{LongTermFile, ShortTermFile}
+}
+
+func HorizonMaxChars(name string) (int, bool) {
+	switch name {
+	case LongTermFile:
+		return LongTermMaxChars, true
+	case ShortTermFile:
+		return ShortTermMaxChars, true
+	default:
+		return 0, false
+	}
+}
+
+func HorizonHeading(name string) (string, bool) {
+	switch name {
+	case LongTermFile:
+		return longTermHeading, true
+	case ShortTermFile:
+		return shortTermHeading, true
+	default:
+		return "", false
+	}
+}
+
+func ValidateHorizonContent(name, content string) error {
+	maxChars, ok := HorizonMaxChars(name)
+	if !ok {
+		return fmt.Errorf("unknown horizon file %q", name)
+	}
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return fmt.Errorf("%s content is empty", name)
+	}
+	if len(content) > maxChars {
+		return fmt.Errorf("%s exceeds %d chars", name, maxChars)
+	}
+	heading, _ := HorizonHeading(name)
+	firstLine, _, _ := strings.Cut(content, "\n")
+	if strings.TrimSpace(firstLine) != heading {
+		return fmt.Errorf("%s must start with %q", name, heading)
+	}
+	return nil
+}
+
+func isHorizonPath(root, path string) bool {
+	for _, name := range HorizonFiles() {
+		if path == filepath.Join(root, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func (fs *FileSystem) EnsureHorizonFiles() ([]string, error) {
+	// Callers may run this before EnsureLayout on a fresh machine, where even
+	// the root doesn't exist yet.
+	if err := os.MkdirAll(fs.Root, 0o755); err != nil {
+		return nil, err
+	}
+	var created []string
+	for _, name := range HorizonFiles() {
+		path := filepath.Join(fs.Root, name)
+		if _, err := os.Stat(path); err == nil {
+			continue
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+		if err := os.WriteFile(path, []byte(horizonSkeletons[name]), 0o644); err != nil {
+			return nil, err
+		}
+		created = append(created, name)
+	}
+	return created, nil
+}
+
+func (fs *FileSystem) ReadRootFile(name string) (string, error) {
+	path, err := fs.rootFilePath(name)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (fs *FileSystem) WriteRootFile(name, content string) error {
+	path, err := fs.rootFilePath(name)
+	if err != nil {
+		return err
+	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	return AtomicWrite(path, []byte(content))
+}
+
+func (fs *FileSystem) rootFilePath(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || filepath.Base(name) != name {
+		return "", fmt.Errorf("invalid root file name %q", name)
+	}
+	return filepath.Join(fs.Root, name), nil
+}
+
 func LayoutDirs() []string {
 	return []string{
 		"daily",
@@ -103,6 +236,9 @@ func (fs *FileSystem) ListPages() ([]Page, error) {
 			return nil
 		}
 		if filepath.Ext(path) != ".md" {
+			return nil
+		}
+		if isHorizonPath(fs.Root, path) {
 			return nil
 		}
 		page, err := fs.ReadPath(path)

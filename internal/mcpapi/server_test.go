@@ -46,8 +46,26 @@ func TestServerTools(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names[tool.Name] = true
 	}
-	if len(names) != 2 || !names["jazmem_search"] || !names["jazmem_get"] {
+	if len(names) != 3 || !names["jazmem_search"] || !names["jazmem_search_raw"] || !names["jazmem_get"] {
 		t.Fatalf("unexpected registered tools %#v", names)
+	}
+
+	rawCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "jazmem_search_raw",
+		Arguments: map[string]any{"query": "Alice jazmem MCP", "limit": 5},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rawCall.IsError {
+		t.Fatalf("raw search tool error: %#v", rawCall.Content)
+	}
+	raw := decodeStructured[jazmem.SearchResponse](t, rawCall)
+	if len(raw.Results) == 0 || raw.Results[0].Slug != "people/alice-bentick" {
+		t.Fatalf("unexpected raw search response %#v", raw)
+	}
+	if len(rawCall.Content) == 0 {
+		t.Fatal("expected rendered raw search text content")
 	}
 
 	searchCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{

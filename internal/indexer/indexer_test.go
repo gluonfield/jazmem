@@ -1,6 +1,10 @@
 package indexer
 
-import "testing"
+import (
+	"testing"
+
+	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
+)
 
 func TestExtractExplicitLinksIgnoresCode(t *testing.T) {
 	body := StripCode("Use [[people/alice|Alice]].\n\n```md\n[[people/bob]]\n```\n`[[people/cara]]`")
@@ -40,5 +44,36 @@ func TestExtractExplicitLinksMarksRelationshipSectionOnly(t *testing.T) {
 func TestNormalizeAlias(t *testing.T) {
 	if got := NormalizeAlias("  Alice   Smith "); got != "alice smith" {
 		t.Fatalf("NormalizeAlias = %q", got)
+	}
+}
+
+func TestInferTypedLinksDropsUnorientableEdges(t *testing.T) {
+	// "founder" prose between two people must not emit a founder_of edge.
+	links := inferTypedLinks("people/augustinas", "people/irwin", ExplicitLink{
+		Context: "- [[people/irwin]] - student founder, and Oxford AI/robotics routing.",
+	})
+	if len(links) != 0 {
+		t.Fatalf("person-to-person founder context must not produce typed links, got %#v", links)
+	}
+}
+
+func TestInferRelationDirectorMapsToWorksAt(t *testing.T) {
+	links := inferTypedLinks("people/irwin", "companies/oxford-edge", ExplicitLink{
+		Context: "- [[companies/oxford-edge]] - Director of Oxford Edge.",
+	})
+	if len(links) != 1 || links[0].LinkType != "works_at" || links[0].FromSlug != "people/irwin" || links[0].ToSlug != "companies/oxford-edge" {
+		t.Fatalf("director context should orient person->org works_at, got %#v", links)
+	}
+}
+
+func TestDedupeLinksCollapsesDuplicateEdges(t *testing.T) {
+	links := dedupeLinks([]sqlitestore.LinkRecord{
+		{FromSlug: "people/a", ToSlug: "people/b", LinkType: "friend", LinkSource: "relationship", Context: "ctx one"},
+		{FromSlug: "people/a", ToSlug: "people/b", LinkType: "friend", LinkSource: "relationship", Context: "ctx two"},
+		{FromSlug: "people/b", ToSlug: "people/a", LinkType: "friend", LinkSource: "relationship", Context: "ctx one"},
+		{FromSlug: "people/a", ToSlug: "people/b", LinkType: "mention", LinkSource: "mention", Context: "ctx"},
+	})
+	if len(links) != 3 {
+		t.Fatalf("expected duplicate (from,to,type,source) rows collapsed to 3, got %#v", links)
 	}
 }

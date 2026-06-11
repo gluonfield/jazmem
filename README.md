@@ -4,6 +4,8 @@ Markdown-first personal memory for `jaz`.
 
 Markdown files are the source of truth. SQLite is a rebuildable index for FTS/BM25 search, aliases, links, chunks, scheduler state, and future optional embeddings. Agents store memory by editing raw markdown files, then running `jazmem index`.
 
+Two root-level horizon files are injection surfaces, not indexed pages: `LONG_TERM.md` (identity, goals, standing preferences; rewritten only by `jazmem dream` within a 2,500-char budget) and `SHORT_TERM.md` (current focus and open loops; agents update it live, dream prunes it, 1,500-char budget). `jazmem init`/`Open` create their skeletons; jaz injects them plus today's `daily/` page into every turn (SHORT_TERM.md is the curated carry-over from prior days).
+
 ## Current Performance Position
 
 jazmem does not yet have performance parity with gbrain.
@@ -55,7 +57,7 @@ query
 From the local repo:
 
 ```bash
-cd /Users/wins/Projects/personal/jarvis/jazmem
+cd /Users/wins/.jaz/workspaces/default/jazmem
 go test ./...
 GOBIN=/Users/wins/.local/bin go install ./cmd/jazmem ./cmd/jazmem-server
 ```
@@ -75,9 +77,9 @@ Install the jazmem skill for jaz agents:
 ```bash
 mkdir -p ~/.jaz/skills/jazmem
 rsync -a --delete \
-  /Users/wins/Projects/personal/jarvis/jazmem/SKILL.md \
-  /Users/wins/Projects/personal/jarvis/jazmem/references \
-  /Users/wins/Projects/personal/jarvis/jazmem/agents \
+  /Users/wins/.jaz/workspaces/default/jazmem/SKILL.md \
+  /Users/wins/.jaz/workspaces/default/jazmem/references \
+  /Users/wins/.jaz/workspaces/default/jazmem/agents \
   ~/.jaz/skills/jazmem/
 ```
 
@@ -103,6 +105,10 @@ jazmem init
 
 `init` creates the folder layout and rebuilds the SQLite index. It does not initialize or manage git.
 
+## Server Mode
+
+The CLI prefers a running server (auto-detected: jaz at `http://127.0.0.1:5299/jazmem`, then `jazmem-server` at `http://127.0.0.1:9477`) so a single process owns index writes. Explicit storage (`--root`, `--db`, `JAZMEM_ROOT`, or `JAZMEM_DB`) skips auto-detection and uses local access; `--server URL` / `JAZMEM_SERVER` pins a server and errors if the server reports a different requested root/db. `--local` forces direct database access. `init` and `eval` always run locally.
+
 ## Core Commands
 
 Search:
@@ -111,11 +117,15 @@ Search:
 jazmem "Ink enterprise Claude deployment"
 jazmem search --limit 5 "Oxford Edge Irwin Zaid"
 jazmem search --text "physics reasoning environment"
+jazmem search --deep "Alice Acme history"
 jazmem --agentic "what do we know about Leeroo"
+jazmem --agentic --deep "what do we know about Leeroo"
 jazmem "who works at Acme"
 jazmem "what connects Alice and Widget Co"
 jazmem eval
 ```
+
+`--deep` is the single retrieval compute knob: wider candidate pool and two-hop link expansion; in agentic mode it also raises the retrieval/evidence budget and runs a gap-driven second retrieval round. Use it as an escalation when a normal search comes back thin.
 
 `--agentic` calls the configured OpenAI-compatible provider and requires the provider's API key. It uses an internal context budget, so `--limit` does not control agentic retrieval. `jazmem` loads `.env` from the current tree when present, including `jaz/backend/.env` in this workspace.
 
@@ -174,7 +184,8 @@ Endpoints:
 curl 'http://127.0.0.1:9477/health'
 curl 'http://127.0.0.1:9477/doctor'
 curl 'http://127.0.0.1:9477/search?q=Ink%20enterprise&limit=5'
-curl 'http://127.0.0.1:9477/search?q=Ink%20enterprise&agentic=1'
+curl 'http://127.0.0.1:9477/search?q=Ink%20enterprise&deep=1'
+curl 'http://127.0.0.1:9477/search?q=Ink%20enterprise&agentic=1&deep=1'
 curl 'http://127.0.0.1:9477/file/projects/ink'
 curl 'http://127.0.0.1:9477/file/projects/ink?raw=1'
 curl -X POST 'http://127.0.0.1:9477/reindex'
@@ -213,7 +224,8 @@ Example MCP client config:
 
 Tools:
 
-- `jazmem_search`: provider-backed answer synthesis with citations and gaps. Input is `query`; output is `AgenticResponse`.
+- `jazmem_search`: provider-backed answer synthesis with citations and gaps. Input is `query` plus optional `deep`; output is `AgenticResponse`.
+- `jazmem_search_raw`: deterministic ranked retrieval with no LLM call. Input is `query` plus optional `limit` and `deep`; output is `SearchResponse`.
 - `jazmem_get`: read a page by slug. The primary MCP text content is the raw markdown; structured output also includes slug, title, path, and not-found suggestions.
 
 MCP is intentionally read-only. There is no MCP write/capture/index/dream tool. Agents store memory by editing markdown files. Indexing, dreaming, and link hygiene are CLI/server/scheduler operations.

@@ -16,6 +16,7 @@ type Service struct {
 
 type Options struct {
 	Limit int
+	Deep  bool
 }
 
 type Response struct {
@@ -29,6 +30,7 @@ func (s *Service) Search(ctx context.Context, query string, opts Options) (Respo
 	if err != nil {
 		return Response{}, err
 	}
+	tagVia(relationalRows, "relationship")
 	titleRows, err := s.Store.SearchTitleAlias(ctx, query, limit)
 	if err != nil {
 		return Response{}, err
@@ -44,11 +46,60 @@ func (s *Service) Search(ctx context.Context, query string, opts Options) (Respo
 		return Response{}, err
 	}
 	graphHits := countNewSlugs(merged, graphRows)
+	if opts.Deep {
+		hop2Rows, err := s.secondHop(ctx, merged, seeds, graphRows, limit)
+		if err != nil {
+			return Response{}, err
+		}
+		graphHits += countNewSlugs(append(append([]sqlitestore.SearchResult{}, merged...), graphRows...), hop2Rows)
+		graphRows = append(graphRows, hop2Rows...)
+	}
+	tagVia(graphRows, "link")
 	merged = mergeRows(merged, graphRows)
-	if len(merged) > chunkCandidateLimit(limit) {
-		merged = merged[:chunkCandidateLimit(limit)]
+	candidateCap := chunkCandidateLimit(limit)
+	if opts.Deep {
+		candidateCap *= 2
+	}
+	if len(merged) > candidateCap {
+		merged = merged[:candidateCap]
 	}
 	return Response{Rows: merged, GraphHits: graphHits}, nil
+}
+
+// secondHop expands links once more from pages the first hop discovered,
+// ranked below first-hop results.
+func (s *Service) secondHop(ctx context.Context, merged []sqlitestore.SearchResult, seeds []string, graphRows []sqlitestore.SearchResult, limit int) ([]sqlitestore.SearchResult, error) {
+	known := map[string]bool{}
+	for _, slug := range seeds {
+		known[slug] = true
+	}
+	for _, row := range merged {
+		known[row.Slug] = true
+	}
+	var hop2Seeds []string
+	for _, row := range graphRows {
+		if known[row.Slug] {
+			continue
+		}
+		known[row.Slug] = true
+		hop2Seeds = append(hop2Seeds, row.Slug)
+	}
+	if len(hop2Seeds) == 0 {
+		return nil, nil
+	}
+	hop2Rows, err := s.Store.LinkedPages(ctx, hop2Seeds, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := hop2Rows[:0]
+	for _, row := range hop2Rows {
+		if known[row.Slug] {
+			continue
+		}
+		row.Score += 0.60
+		out = append(out, row)
+	}
+	return out, nil
 }
 
 func (s *Service) relationalSearch(ctx context.Context, query string, limit int) ([]sqlitestore.SearchResult, error) {
@@ -72,6 +123,12 @@ func (s *Service) relationalSearch(ctx context.Context, query string, limit int)
 		return s.Store.RelationalBetween(ctx, left, right, limit)
 	default:
 		return nil, nil
+	}
+}
+
+func tagVia(rows []sqlitestore.SearchResult, via string) {
+	for i := range rows {
+		rows[i].Via = via
 	}
 }
 
@@ -168,6 +225,7 @@ var betweenPatterns = []*regexp.Regexp{
 var fanoutPatterns = []relationalPattern{
 	{regexp.MustCompile(`(?i)^\s*who\s+(?:has\s+)?(?:invested|invests)\s+in\s+(.+?)\s*\??\s*$`), []string{"invested_in"}, "in"},
 	{regexp.MustCompile(`(?i)^\s*who\s+(?:works|worked)\s+(?:at|for)\s+(.+?)\s*\??\s*$`), []string{"works_at"}, "in"},
+	{regexp.MustCompile(`(?i)^\s*who\s+(?:is|was)\s+(?:the\s+)?(?:director|head)\s+of\s+(.+?)\s*\??\s*$`), []string{"works_at"}, "in"},
 	{regexp.MustCompile(`(?i)^\s*who\s+(?:founded|started|co-founded|cofounded)\s+(.+?)\s*\??\s*$`), []string{"founder_of"}, "in"},
 	{regexp.MustCompile(`(?i)^\s*who\s+(?:advises|advised|is\s+(?:an\s+)?advisor\s+to)\s+(.+?)\s*\??\s*$`), []string{"advises"}, "in"},
 	{regexp.MustCompile(`(?i)^\s*what\s+(?:companies|projects|orgs|organizations)\s+(?:has|does|did)\s+(.+?)\s+(?:invest(?:ed)?\s+in|invests\s+in)\s*\??\s*$`), []string{"invested_in"}, "out"},

@@ -200,4 +200,6 @@ func loadEnvFile(path string) {
 		value = strings.Trim(value, `"'`)
 		_ = os.Setenv(key, value)
 	}
+	// Best-effort by design: a torn read behaves like a shorter .env file.
+	_ = scanner.Err()
 }

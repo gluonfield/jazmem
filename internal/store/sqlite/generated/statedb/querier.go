@@ -15,6 +15,7 @@ type Querier interface {
 	CountRelationshipLinks(ctx context.Context) (int64, error)
 	CountUnresolvedLinks(ctx context.Context) (int64, error)
 	GetTaskState(ctx context.Context, task string) (GetTaskStateRow, error)
+	ListTaskStates(ctx context.Context) ([]SchedulerState, error)
 	OptimizeFTS(ctx context.Context) error
 	RecordTask(ctx context.Context, arg RecordTaskParams) error
 }

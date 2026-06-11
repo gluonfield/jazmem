@@ -28,8 +28,13 @@ func New(memory *jazmem.Memory) *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "jazmem_search",
 		Title:       "Search jazmem",
-		Description: "Search jazmem and synthesize an evidence-grounded answer with citations and gaps. Use this before answering from memory.",
+		Description: "Search jazmem and synthesize an evidence-grounded answer with citations and gaps. Use this before answering from memory. Set deep=true to spend more retrieval compute when a first answer is thin.",
 	}, service.Search)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "jazmem_search_raw",
+		Title:       "Raw search jazmem",
+		Description: "Deterministic ranked retrieval with no LLM call. Returns pages with matched chunk snippets and scores. Use it to pick pages to read or edit, or to drive your own deeper search loop.",
+	}, service.SearchRaw)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "jazmem_get",
 		Title:       "Get jazmem markdown",
@@ -41,6 +46,7 @@ func New(memory *jazmem.Memory) *mcp.Server {
 
 type SearchInput struct {
 	Query string `json:"query" jsonschema:"question or topic to answer from jazmem memory"`
+	Deep  bool   `json:"deep,omitempty" jsonschema:"spend more retrieval compute: wider candidate pool, two-hop link expansion, and a gap-driven second retrieval round"`
 }
 
 func (s *Service) Search(ctx context.Context, _ *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, jazmem.AgenticResponse, error) {
@@ -48,8 +54,28 @@ func (s *Service) Search(ctx context.Context, _ *mcp.CallToolRequest, input Sear
 	if query == "" {
 		return nil, jazmem.AgenticResponse{}, errors.New("query is required")
 	}
-	response, err := s.Memory.AgenticSearch(ctx, query, jazmem.AgenticOptions{})
+	response, err := s.Memory.AgenticSearch(ctx, query, jazmem.AgenticOptions{Deep: input.Deep})
 	return nil, response, err
+}
+
+type RawSearchInput struct {
+	Query string `json:"query" jsonschema:"search terms; names and concrete nouns work best"`
+	Limit int    `json:"limit,omitempty" jsonschema:"max pages to return, 1-50, default 10"`
+	Deep  bool   `json:"deep,omitempty" jsonschema:"wider candidate pool and two-hop link expansion"`
+}
+
+func (s *Service) SearchRaw(ctx context.Context, _ *mcp.CallToolRequest, input RawSearchInput) (*mcp.CallToolResult, jazmem.SearchResponse, error) {
+	query := strings.TrimSpace(input.Query)
+	if query == "" {
+		return nil, jazmem.SearchResponse{}, errors.New("query is required")
+	}
+	response, err := s.Memory.Retrieve(ctx, query, jazmem.SearchOptions{Limit: input.Limit, Deep: input.Deep})
+	if err != nil {
+		return nil, jazmem.SearchResponse{}, err
+	}
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: jazmem.RenderSearchText(response)}},
+	}, response, nil
 }
 
 type PageInput struct {
@@ -67,6 +93,8 @@ type PageOutput struct {
 	Aliases     []string                `json:"aliases,omitempty"`
 	Raw         string                  `json:"raw,omitempty"`
 	ModifiedAt  string                  `json:"modified_at,omitempty"`
+	Links       []jazmem.LinkRef        `json:"links,omitempty"`
+	Backlinks   []jazmem.LinkRef        `json:"backlinks,omitempty"`
 }
 
 func (s *Service) GetPage(ctx context.Context, _ *mcp.CallToolRequest, input PageInput) (*mcp.CallToolResult, PageOutput, error) {
@@ -96,6 +124,8 @@ func pageOutput(page jazmem.Page) PageOutput {
 		Aliases:    page.Aliases,
 		Raw:        page.Raw,
 		ModifiedAt: page.ModifiedAt.Format(time.RFC3339Nano),
+		Links:      page.Links,
+		Backlinks:  page.Backlinks,
 	}
 }
 

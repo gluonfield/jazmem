@@ -57,8 +57,9 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		writeError(w, errors.New("query parameter q is required"))
 		return
 	}
+	deep := isTruthy(r.URL.Query().Get("deep"))
 	if isTruthy(r.URL.Query().Get("agentic")) {
-		results, err := s.Memory.AgenticSearch(r.Context(), query, jazmem.AgenticOptions{})
+		results, err := s.Memory.AgenticSearch(r.Context(), query, jazmem.AgenticOptions{Deep: deep})
 		if err != nil {
 			writeError(w, err)
 			return
@@ -75,7 +76,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	results, err := s.Memory.Retrieve(r.Context(), query, jazmem.SearchOptions{Limit: limit})
+	results, err := s.Memory.Retrieve(r.Context(), query, jazmem.SearchOptions{Limit: limit, Deep: deep})
 	if err != nil {
 		writeError(w, err)
 		return

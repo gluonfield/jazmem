@@ -84,6 +84,40 @@ func (q *Queries) GetTaskState(ctx context.Context, task string) (GetTaskStateRo
 	return i, err
 }
 
+const listTaskStates = `-- name: ListTaskStates :many
+SELECT task, last_run_at_ms, last_status, last_error
+FROM scheduler_state
+ORDER BY task
+`
+
+func (q *Queries) ListTaskStates(ctx context.Context) ([]SchedulerState, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskStates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SchedulerState{}
+	for rows.Next() {
+		var i SchedulerState
+		if err := rows.Scan(
+			&i.Task,
+			&i.LastRunAtMs,
+			&i.LastStatus,
+			&i.LastError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const optimizeFTS = `-- name: OptimizeFTS :exec
 INSERT INTO chunks_fts(chunks_fts)
 VALUES ('optimize')

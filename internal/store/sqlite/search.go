@@ -96,7 +96,7 @@ func (s *Store) LinkedPages(ctx context.Context, seeds []string, limit int) ([]S
 		ranked AS (
 			SELECT slug, MIN(score) AS score
 			FROM edges
-			WHERE slug NOT IN (SELECT slug FROM seed)
+			WHERE slug NOT IN (SELECT slug FROM seed) AND slug NOT LIKE 'dreams/%%'
 			GROUP BY slug
 			ORDER BY score
 			LIMIT ?
@@ -118,11 +118,11 @@ func (s *Store) LinkedPages(ctx context.Context, seeds []string, limit int) ([]S
 
 func (s *Store) searchFTS(ctx context.Context, match string, limit int) ([]SearchResult, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT f.slug, f.chunk_index, p.title,
-		substr(f.body, 1, 240) AS snippet,
+		substr(f.body, 1, 600) AS snippet,
 		bm25(chunks_fts) AS rank
 		FROM chunks_fts f
 		JOIN pages p ON p.slug = f.slug
-		WHERE chunks_fts MATCH ?
+		WHERE chunks_fts MATCH ? AND f.slug NOT LIKE 'dreams/%'
 		ORDER BY rank
 		LIMIT ?`, match, chunkPoolLimit(limit))
 	if err != nil {

@@ -114,11 +114,8 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 				Display:    link.Display,
 				Context:    link.Context,
 			})
-			report.ExplicitLinks++
 			if link.InRelationships {
-				typed := inferTypedLinks(page.Slug, target, link)
-				data.Links = append(data.Links, typed...)
-				report.TypedLinks += len(typed)
+				data.Links = append(data.Links, inferTypedLinks(page.Slug, target, link)...)
 			}
 		}
 
@@ -127,12 +124,22 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 				continue
 			}
 			data.Links = append(data.Links, mention)
-			report.MentionLinks++
 		}
 
 		chunks := SplitChunks(page)
 		data.Chunks = append(data.Chunks, chunks...)
 		report.ChunkCount += len(chunks)
+	}
+	data.Links = dedupeLinks(data.Links)
+	for _, link := range data.Links {
+		switch link.LinkSource {
+		case "explicit":
+			report.ExplicitLinks++
+		case "relationship":
+			report.TypedLinks++
+		case "mention":
+			report.MentionLinks++
+		}
 	}
 	sort.Slice(data.Aliases, func(a, b int) bool {
 		if data.Aliases[a].NormalizedAlias == data.Aliases[b].NormalizedAlias {
@@ -142,6 +149,23 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 	})
 	report.PageCount = len(pages)
 	return data, report, nil
+}
+
+// dedupeLinks keeps the first row per (from, to, type, source): reciprocal
+// relationship bullets and multi-alias mentions otherwise insert duplicate
+// edges because the links primary key includes display and context.
+func dedupeLinks(links []sqlitestore.LinkRecord) []sqlitestore.LinkRecord {
+	seen := map[string]bool{}
+	out := make([]sqlitestore.LinkRecord, 0, len(links))
+	for _, link := range links {
+		key := link.FromSlug + "\x00" + link.ToSlug + "\x00" + link.LinkType + "\x00" + link.LinkSource
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, link)
+	}
+	return out
 }
 
 func ExtractExplicitLinks(body string) []ExplicitLink {
@@ -406,7 +430,7 @@ func inferRelation(context string) relationSpec {
 		return relationSpec{Type: "friend", Symmetric: true}
 	case containsAny(text, "works with", "worked with", "collaborates", "collaborator", "collaboration"):
 		return relationSpec{Type: "works_with", Symmetric: true}
-	case containsAny(text, "works at", "works for", "worked at", "worked for", "employed by", "employee at"):
+	case containsAny(text, "works at", "works for", "worked at", "worked for", "employed by", "employee at", "director of", "director at", "head of"):
 		return relationSpec{Type: "works_at", Orient: "person_to_org"}
 	case containsAny(text, "founded", "founder", "co-founder", "cofounder", "started"):
 		return relationSpec{Type: "founder_of", Orient: "actor_to_org"}
@@ -419,6 +443,9 @@ func inferRelation(context string) relationSpec {
 	}
 }
 
+// orientRelationship returns empty slugs when neither node fits the relation
+// shape (e.g. a person-to-person "founder" mention), so no edge is emitted
+// rather than a misdirected one.
 func orientRelationship(fromSlug, toSlug, orient string) (string, string) {
 	switch orient {
 	case "person_to_org":
@@ -436,7 +463,7 @@ func orientRelationship(fromSlug, toSlug, orient string) (string, string) {
 			return toSlug, fromSlug
 		}
 	}
-	return fromSlug, toSlug
+	return "", ""
 }
 
 func containsAny(text string, needles ...string) bool {
