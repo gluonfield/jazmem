@@ -31,15 +31,16 @@ type Memory struct {
 
 func Open(cfg Config) (*Memory, error) {
 	cfg = ResolveConfig(cfg)
+	if _, err := ensureLayoutResolved(cfg); err != nil {
+		return nil, err
+	}
+	return open(cfg)
+}
+
+func open(cfg Config) (*Memory, error) {
 	root := cfg.Root
 	dbPath := cfg.DBPath
 	fs := memfs.New(root)
-	if _, err := fs.EnsureHorizonFiles(); err != nil {
-		return nil, err
-	}
-	if err := fs.EnsureLayout(); err != nil {
-		return nil, err
-	}
 	store, err := sqlitestore.Open(dbPath)
 	if err != nil {
 		return nil, err

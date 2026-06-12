@@ -86,7 +86,40 @@ func TestResolveConfigUsesOpenAIAPIKeyForOpenAIEndpoint(t *testing.T) {
 	}
 }
 
-func TestInitBootstrapsLayoutAndIndex(t *testing.T) {
+func TestEnsureLayoutCreatesLayoutHorizonFilesAndDBDir(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "memory")
+	dbPath := filepath.Join(t.TempDir(), "db", "index.sqlite")
+
+	report, err := EnsureLayout(Config{Root: root, DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Root != cleanPath(root) || report.DBPath != cleanPath(dbPath) {
+		t.Fatalf("unexpected paths %#v", report)
+	}
+	if len(report.CreatedDirs) == 0 || len(report.CreatedHorizonFiles) != 2 {
+		t.Fatalf("expected fresh layout report, got %#v", report)
+	}
+	for _, path := range []string{
+		filepath.Join(root, "LONG_TERM.md"),
+		filepath.Join(root, "SHORT_TERM.md"),
+		filepath.Dir(dbPath),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("missing layout path %s: %v", path, err)
+		}
+	}
+
+	second, err := EnsureLayout(Config{Root: root, DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.CreatedDirs) != 0 || len(second.CreatedHorizonFiles) != 0 {
+		t.Fatalf("layout ensure should be idempotent, got %#v", second)
+	}
+}
+
+func TestInitEnsuresLayoutAndIndex(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "memory")
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
 	report, err := Init(t.Context(), Config{Root: root, DBPath: dbPath})
@@ -101,7 +134,7 @@ func TestInitBootstrapsLayoutAndIndex(t *testing.T) {
 	}
 	for _, dir := range report.Directories {
 		if _, err := os.Stat(filepath.Join(root, dir)); err != nil {
-			t.Fatalf("missing bootstrap dir %s: %v", dir, err)
+			t.Fatalf("missing layout dir %s: %v", dir, err)
 		}
 	}
 	if len(report.CreatedDirs) == 0 {

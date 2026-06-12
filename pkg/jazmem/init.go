@@ -2,8 +2,6 @@ package jazmem
 
 import (
 	"context"
-
-	"github.com/gluonfield/jazmem/internal/memfs"
 )
 
 type InitReport struct {
@@ -22,12 +20,11 @@ type InitReport struct {
 
 func Init(ctx context.Context, cfg Config) (InitReport, error) {
 	cfg = ResolveConfig(cfg)
-	fs := memfs.New(cfg.Root)
-	layout, err := fs.EnsureLayoutReport()
+	layout, err := ensureLayoutResolved(cfg)
 	if err != nil {
 		return InitReport{}, err
 	}
-	memory, err := Open(cfg)
+	memory, err := open(cfg)
 	if err != nil {
 		return InitReport{}, err
 	}
@@ -40,8 +37,8 @@ func Init(ctx context.Context, cfg Config) (InitReport, error) {
 		Root:                  memory.Root(),
 		DBPath:                memory.DBPath(),
 		Directories:           layout.Directories,
-		CreatedDirs:           layout.Created,
-		ExistingDirs:          layout.Existing,
+		CreatedDirs:           layout.CreatedDirs,
+		ExistingDirs:          layout.ExistingDirs,
 		IndexedPages:          indexReport.PageCount,
 		IndexedChunks:         indexReport.ChunkCount,
 		ExplicitLinks:         indexReport.ExplicitLinks,
