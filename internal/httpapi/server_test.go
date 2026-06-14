@@ -174,12 +174,12 @@ func TestMCPEndpointUsesServerMemory(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names[tool.Name] = true
 	}
-	if !names["jazmem_search"] || !names["jazmem_get"] {
+	if !names["memory_search"] || !names["memory_get"] {
 		t.Fatalf("unexpected MCP tools %#v", names)
 	}
 
 	searchCall, err := session.CallTool(t.Context(), &mcp.CallToolParams{
-		Name:      "jazmem_search",
+		Name:      "memory_search",
 		Arguments: map[string]any{"query": "Alice HTTP MCP"},
 	})
 	if err != nil {
@@ -198,7 +198,7 @@ func TestMCPEndpointUsesServerMemory(t *testing.T) {
 	}
 
 	pageCall, err := session.CallTool(t.Context(), &mcp.CallToolParams{
-		Name:      "jazmem_get",
+		Name:      "memory_get",
 		Arguments: map[string]any{"slug": "people/alice-http-mcp"},
 	})
 	if err != nil {

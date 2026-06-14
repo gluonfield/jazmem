@@ -46,12 +46,12 @@ func TestServerTools(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names[tool.Name] = true
 	}
-	if len(names) != 3 || !names["jazmem_search"] || !names["jazmem_search_raw"] || !names["jazmem_get"] {
+	if len(names) != 3 || !names["memory_search"] || !names["memory_search_raw"] || !names["memory_get"] {
 		t.Fatalf("unexpected registered tools %#v", names)
 	}
 
 	rawCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "jazmem_search_raw",
+		Name:      "memory_search_raw",
 		Arguments: map[string]any{"query": "Alice jazmem MCP", "limit": 5},
 	})
 	if err != nil {
@@ -69,7 +69,7 @@ func TestServerTools(t *testing.T) {
 	}
 
 	searchCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "jazmem_search",
+		Name:      "memory_search",
 		Arguments: map[string]any{"query": "Alice jazmem MCP"},
 	})
 	if err != nil {
@@ -84,7 +84,7 @@ func TestServerTools(t *testing.T) {
 	}
 
 	pageCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "jazmem_get",
+		Name:      "memory_get",
 		Arguments: map[string]any{"slug": "people/alice-bentick"},
 	})
 	if err != nil {
@@ -103,7 +103,7 @@ func TestServerTools(t *testing.T) {
 	}
 
 	missingCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "jazmem_get",
+		Name:      "memory_get",
 		Arguments: map[string]any{"slug": "people/alice"},
 	})
 	if err != nil {

@@ -13,35 +13,55 @@ import (
 
 const serverVersion = "0.1.0"
 
-type Service struct {
-	Memory *jazmem.Memory
+var toolNames = []string{"memory_search", "memory_search_raw", "memory_get"}
+
+type Memory interface {
+	AgenticSearch(context.Context, string, jazmem.AgenticOptions) (jazmem.AgenticResponse, error)
+	Retrieve(context.Context, string, jazmem.SearchOptions) (jazmem.SearchResponse, error)
+	GetPage(context.Context, string) (jazmem.Page, error)
 }
 
-func New(memory *jazmem.Memory) *mcp.Server {
-	service := &Service{Memory: memory}
+type Service struct {
+	Memory Memory
+}
+
+func New(memory Memory) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "jazmem",
 		Title:   "Jazmem Memory",
 		Version: serverVersion,
 	}, nil)
+	AddTools(server, memory)
+	return server
+}
 
+func AddTools(server *mcp.Server, memory Memory) {
+	service := &Service{Memory: memory}
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "jazmem_search",
+		Name:        toolNames[0],
 		Title:       "Search jazmem",
 		Description: "Search jazmem and synthesize an evidence-grounded answer with citations and gaps. Use this before answering from memory. Set deep=true to spend more retrieval compute when a first answer is thin.",
 	}, service.Search)
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "jazmem_search_raw",
+		Name:        toolNames[1],
 		Title:       "Raw search jazmem",
 		Description: "Deterministic ranked retrieval with no LLM call. Returns pages with matched chunk snippets and scores. Use it to pick pages to read or edit, or to drive your own deeper search loop.",
 	}, service.SearchRaw)
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "jazmem_get",
+		Name:        toolNames[2],
 		Title:       "Get jazmem markdown",
 		Description: "Read a markdown memory page by slug. Returns raw markdown, file path metadata, and not-found suggestions for close slug matches.",
 	}, service.GetPage)
+}
 
-	return server
+func RemoveTools(server *mcp.Server) {
+	if server != nil {
+		server.RemoveTools(toolNames...)
+	}
+}
+
+func ToolNames() []string {
+	return append([]string(nil), toolNames...)
 }
 
 type SearchInput struct {

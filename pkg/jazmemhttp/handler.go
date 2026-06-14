@@ -2,6 +2,7 @@
 package jazmemhttp
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gluonfield/jazmem/internal/httpapi"
@@ -9,6 +10,24 @@ import (
 	"github.com/gluonfield/jazmem/pkg/jazmem"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+type MCPMemory interface {
+	AgenticSearch(context.Context, string, jazmem.AgenticOptions) (jazmem.AgenticResponse, error)
+	Retrieve(context.Context, string, jazmem.SearchOptions) (jazmem.SearchResponse, error)
+	GetPage(context.Context, string) (jazmem.Page, error)
+}
+
+func AddMCPTools(server *mcp.Server, memory MCPMemory) {
+	mcpapi.AddTools(server, memory)
+}
+
+func RemoveMCPTools(server *mcp.Server) {
+	mcpapi.RemoveTools(server)
+}
+
+func MCPToolNames() []string {
+	return mcpapi.ToolNames()
+}
 
 // NewMCPServer returns the in-process MCP server for one Memory.
 func NewMCPServer(m *jazmem.Memory) *mcp.Server {
