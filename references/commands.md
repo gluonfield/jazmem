@@ -30,22 +30,13 @@ jazmem get --raw projects/ink
 jazmem get --body projects/ink
 ```
 
-Rebuild and inspect:
+Inspect:
 
 ```bash
-jazmem index
 jazmem doctor
 ```
 
-Run maintenance:
-
-```bash
-jazmem dream
-jazmem link-hygiene
-jazmem eval
-jazmem eval --limit 10
-jazmem eval --file ./my-eval.json
-```
+Maintenance is handled by the Jaz scheduler. Do not run maintenance commands during ordinary memory writing unless explicitly asked.
 
 ## Server Mode
 
@@ -55,12 +46,11 @@ The CLI prefers a running server so one process owns all index writes (no versio
 - Explicit storage (`--root`, `--db`, `JAZMEM_ROOT`, `JAZMEM_DB`): skip auto-detection and use direct database access.
 - `--server URL` or `JAZMEM_SERVER`: pin a specific server (works for remote hosts); if storage is also explicit, the server's `/health` root/db must match the requested storage.
 - `--local`: force direct database access, skipping detection.
-- Routed commands: search, get, file, index, doctor, dream, link-hygiene. `init` and `eval` always run locally.
+- Routed commands: search, get, file, and doctor. Maintenance commands are for explicit jazmem-internals work only.
 
 ```bash
 jazmem doctor                          # auto-detects the jaz server when running
 jazmem --server 192.168.1.10:5299/jazmem "Alice open loops"
-jazmem index --local                   # direct DB, e.g. while the server is down
 ```
 
 ## Raw Search Response
@@ -166,9 +156,7 @@ Provider env:
 
 `jazmem file <slug>` returns the canonical markdown file path as plain text.
 
-`jazmem index`, `jazmem dream`, `jazmem link-hygiene`, `jazmem eval`, and `jazmem doctor` return JSON reports.
-
-`jazmem index` includes `typed_links`; `jazmem doctor` includes `typed_link_count`.
+Maintenance commands and `jazmem doctor` return JSON reports. `jazmem doctor` includes `typed_link_count`.
 
 ## Eval
 
@@ -239,7 +227,6 @@ MCP client config:
 Tools:
 
 - `memory_search`: input `{ "query": "...", "deep": true }` (`deep` optional); output `AgenticResponse`; requires the configured provider's key, such as `OPENROUTER_API_KEY` or `OPENAI_API_KEY`.
-- `memory_search_raw`: input `{ "query": "...", "limit": 10, "deep": false }` (`limit` and `deep` optional); output `SearchResponse`; deterministic, no LLM call.
 - `memory_get`: input `{ "slug": "people/alice" }`; primary text content is raw markdown. Structured output is `{ "found": true, "slug": "...", "path": "...", "title": "...", "raw": "..." }` or `{ "found": false, "error": "not found: people/alice", "suggestions": [...] }`.
 
 MCP is read-only. There is no MCP write/capture/index/dream tool. To store data, edit markdown directly. Indexing, dreaming, and link hygiene are CLI/server/scheduler operations.

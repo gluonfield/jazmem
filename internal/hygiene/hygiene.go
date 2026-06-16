@@ -115,7 +115,7 @@ func (s *Service) writeReview(proposals []Proposal) (string, error) {
 		"date":  date,
 	}))
 	fmt.Fprintf(&b, "# Link Hygiene Review %s\n\n", date)
-	b.WriteString("These are derived relationship proposals. Promote them by editing the canonical markdown pages directly, then run `jazmem index`.\n\n")
+	b.WriteString("These are derived relationship proposals. Promote them by editing the canonical markdown pages directly; Jaz owns indexing and maintenance.\n\n")
 	for i, proposal := range proposals {
 		fmt.Fprintf(&b, "## Proposal %d\n\n", i+1)
 		fmt.Fprintf(&b, "- From: [[%s]]\n", proposal.FromSlug)

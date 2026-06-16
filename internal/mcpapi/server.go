@@ -13,11 +13,10 @@ import (
 
 const serverVersion = "0.1.0"
 
-var toolNames = []string{"memory_search", "memory_search_raw", "memory_get"}
+var toolNames = []string{"memory_search", "memory_get"}
 
 type Memory interface {
 	AgenticSearch(context.Context, string, jazmem.AgenticOptions) (jazmem.AgenticResponse, error)
-	Retrieve(context.Context, string, jazmem.SearchOptions) (jazmem.SearchResponse, error)
 	GetPage(context.Context, string) (jazmem.Page, error)
 }
 
@@ -44,11 +43,6 @@ func AddTools(server *mcp.Server, memory Memory) {
 	}, service.Search)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        toolNames[1],
-		Title:       "Raw search jazmem",
-		Description: "Deterministic ranked retrieval with no LLM call. Returns pages with matched chunk snippets and scores. Use it to pick pages to read or edit, or to drive your own deeper search loop.",
-	}, service.SearchRaw)
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        toolNames[2],
 		Title:       "Get jazmem markdown",
 		Description: "Read a markdown memory page by slug. Returns raw markdown, file path metadata, and not-found suggestions for close slug matches.",
 	}, service.GetPage)
@@ -76,26 +70,6 @@ func (s *Service) Search(ctx context.Context, _ *mcp.CallToolRequest, input Sear
 	}
 	response, err := s.Memory.AgenticSearch(ctx, query, jazmem.AgenticOptions{Deep: input.Deep})
 	return nil, response, err
-}
-
-type RawSearchInput struct {
-	Query string `json:"query" jsonschema:"search terms; names and concrete nouns work best"`
-	Limit int    `json:"limit,omitempty" jsonschema:"max pages to return, 1-50, default 10"`
-	Deep  bool   `json:"deep,omitempty" jsonschema:"wider candidate pool and two-hop link expansion"`
-}
-
-func (s *Service) SearchRaw(ctx context.Context, _ *mcp.CallToolRequest, input RawSearchInput) (*mcp.CallToolResult, jazmem.SearchResponse, error) {
-	query := strings.TrimSpace(input.Query)
-	if query == "" {
-		return nil, jazmem.SearchResponse{}, errors.New("query is required")
-	}
-	response, err := s.Memory.Retrieve(ctx, query, jazmem.SearchOptions{Limit: input.Limit, Deep: input.Deep})
-	if err != nil {
-		return nil, jazmem.SearchResponse{}, err
-	}
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: jazmem.RenderSearchText(response)}},
-	}, response, nil
 }
 
 type PageInput struct {

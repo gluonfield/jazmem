@@ -2,6 +2,7 @@ package jazmem
 
 import (
 	"context"
+	"errors"
 
 	"github.com/gluonfield/jazmem/internal/dream"
 	"github.com/gluonfield/jazmem/internal/memfs"
@@ -52,6 +53,12 @@ func (m *Memory) Reindex(ctx context.Context, _ ReindexOptions) (Report, error) 
 }
 
 func (m *Memory) Dream(ctx context.Context, opts DreamOptions) (DreamReport, error) {
+	if m.dreamRun != nil {
+		report, err := m.runConfiguredDream(ctx, opts)
+		if !errors.Is(err, ErrDreamRunnerUnavailable) {
+			return report, err
+		}
+	}
 	report, err := m.dream.Run(ctx, dream.Options{Date: opts.Date})
 	if err != nil {
 		return DreamReport{}, err
@@ -68,6 +75,49 @@ func (m *Memory) Dream(ctx context.Context, opts DreamOptions) (DreamReport, err
 		ModelUsed:        report.ModelUsed,
 		Warnings:         report.Warnings,
 	}, nil
+}
+
+func (m *Memory) runConfiguredDream(ctx context.Context, opts DreamOptions) (DreamReport, error) {
+	if _, err := m.Reindex(ctx, ReindexOptions{}); err != nil {
+		return DreamReport{}, err
+	}
+	date := opts.Date
+	if date.IsZero() {
+		date = m.timeNow()
+	}
+	report, err := m.dreamRun.RunDream(ctx, DreamRequest{
+		Root:   m.root,
+		DBPath: m.dbPath,
+		Date:   date.Local(),
+	})
+	if errors.Is(err, ErrDreamRunnerUnavailable) {
+		return report, err
+	}
+	horizonErr := m.validateHorizonFiles()
+	_, reindexErr := m.Reindex(ctx, ReindexOptions{})
+	if err != nil {
+		return report, errors.Join(err, reindexErr)
+	}
+	if horizonErr != nil {
+		return report, errors.Join(horizonErr, reindexErr)
+	}
+	if reindexErr != nil {
+		return report, reindexErr
+	}
+	return report, nil
+}
+
+func (m *Memory) validateHorizonFiles() error {
+	for _, name := range memfs.HorizonFiles() {
+		content, err := m.fs.ReadRootFile(name)
+		if err != nil {
+			return err
+		}
+		if err := memfs.ValidateHorizonContent(name, content); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *Memory) LinkHygiene(ctx context.Context) (LinkHygieneReport, error) {

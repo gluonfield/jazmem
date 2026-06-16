@@ -1,6 +1,10 @@
 package jazmem
 
-import "time"
+import (
+	"context"
+	"errors"
+	"time"
+)
 
 type Config struct {
 	Root             string
@@ -10,6 +14,7 @@ type Config struct {
 	Model            string
 	ReasoningEffort  string
 	Now              func() time.Time
+	DreamRunner      DreamRunner
 }
 
 type PageRef struct {
@@ -116,6 +121,21 @@ type DreamOptions struct {
 	Date time.Time `json:"date,omitzero"`
 }
 
+var ErrDreamRunnerUnavailable = errors.New("dream runner unavailable")
+
+// DreamRunner lets an embedding host replace jazmem's provider-backed dream
+// prompt with a richer runtime, such as a coding agent that edits markdown
+// directly. jazmem still owns indexing before and after the run.
+type DreamRunner interface {
+	RunDream(context.Context, DreamRequest) (DreamReport, error)
+}
+
+type DreamRequest struct {
+	Root   string    `json:"root"`
+	DBPath string    `json:"db_path"`
+	Date   time.Time `json:"date"`
+}
+
 type DreamReport struct {
 	RunSlug          string   `json:"run_slug"`
 	ReviewSlug       string   `json:"review_slug,omitempty"`
@@ -127,6 +147,11 @@ type DreamReport struct {
 	ShortTermUpdated bool     `json:"short_term_updated,omitempty"`
 	ModelUsed        string   `json:"model_used,omitempty"`
 	Warnings         []string `json:"warnings,omitempty"`
+}
+
+type DreamTaskReport struct {
+	Index Report      `json:"index"`
+	Dream DreamReport `json:"dream"`
 }
 
 type EvalCase struct {

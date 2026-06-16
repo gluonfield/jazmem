@@ -77,8 +77,8 @@ jazmem file projects/jaz
 
 Create or update pages:
 
-Edit markdown files directly, then run `jazmem index`. Use `jazmem file <slug>`
-to resolve the path for an existing page.
+Edit markdown files directly. Use `jazmem file <slug>` to resolve the path for
+an existing page. Jaz's scheduler owns indexing for ordinary memory writes.
 
 Maintain the index:
 

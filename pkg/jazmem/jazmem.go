@@ -2,6 +2,7 @@ package jazmem
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/gluonfield/jazmem/internal/dream"
@@ -24,9 +25,12 @@ type Memory struct {
 	indexer  *indexer.Indexer
 	search   *search.Service
 	dream    *dream.Service
+	dreamRun DreamRunner
 	hygiene  *hygiene.Service
 	ingester *ingest.Service
 	llm      *llm.Client
+
+	maintenanceMu sync.Mutex
 }
 
 func Open(cfg Config) (*Memory, error) {
@@ -52,6 +56,7 @@ func open(cfg Config) (*Memory, error) {
 		fs:     fs,
 		store:  store,
 	}
+	m.dreamRun = cfg.DreamRunner
 	m.indexer = &indexer.Indexer{FS: fs, Store: store}
 	m.search = &search.Service{Store: store}
 	m.ingester = &ingest.Service{}
@@ -91,6 +96,10 @@ func (m *Memory) Root() string {
 
 func (m *Memory) DBPath() string {
 	return m.dbPath
+}
+
+func (m *Memory) SetDreamRunner(runner DreamRunner) {
+	m.dreamRun = runner
 }
 
 func (m *Memory) timeNow() time.Time {

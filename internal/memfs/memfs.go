@@ -83,7 +83,7 @@ const (
 var horizonSkeletons = map[string]string{
 	LongTermFile: longTermHeading + `
 
-Identity, goals, standing preferences, key relationships. Maintained nightly by dream; agents treat this file as read-only.
+Identity, goals, standing preferences, key relationships. Maintained periodically by dream; agents treat this file as read-only.
 `,
 	ShortTermFile: shortTermHeading + `
 

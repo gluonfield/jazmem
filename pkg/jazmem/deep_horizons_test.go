@@ -246,6 +246,37 @@ func TestHorizonReadWriteAndSchedulerStatus(t *testing.T) {
 	}
 }
 
+func TestDreamSchedulerRunsEverySixHours(t *testing.T) {
+	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	mem, err := Open(Config{Root: t.TempDir(), DBPath: filepath.Join(t.TempDir(), "index.sqlite"), Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	var dream taskSpec
+	for _, spec := range mem.taskSpecs() {
+		if spec.name == "dream" {
+			dream = spec
+			break
+		}
+	}
+	if dream.name == "" {
+		t.Fatal("dream task spec not found")
+	}
+
+	lastRun := now.Add(-6 * time.Hour)
+	if !dream.due(lastRun, now) {
+		t.Fatal("dream should be due six hours after the last run")
+	}
+	if dream.due(now.Add(-6*time.Hour+time.Minute), now) {
+		t.Fatal("dream should not be due before six hours have elapsed")
+	}
+	if next := dream.next(lastRun, now); !next.Equal(now) {
+		t.Fatalf("dream next due = %s, want %s", next, now)
+	}
+}
+
 func TestSearchExcludesDreamsLane(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")

@@ -13,7 +13,6 @@ import (
 
 type MCPMemory interface {
 	AgenticSearch(context.Context, string, jazmem.AgenticOptions) (jazmem.AgenticResponse, error)
-	Retrieve(context.Context, string, jazmem.SearchOptions) (jazmem.SearchResponse, error)
 	GetPage(context.Context, string) (jazmem.Page, error)
 }
 

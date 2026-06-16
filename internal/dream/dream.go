@@ -116,13 +116,14 @@ func (s *Service) Run(ctx context.Context, opts Options) (Report, error) {
 		})
 	}
 
-	runSlug := "dreams/runs/" + date.Format("2006-01-02")
+	runSuffix := runSlugSuffix(date)
+	runSlug := "dreams/runs/" + runSuffix
 	if err := s.FS.WritePage(runSlug, renderRunPage(date, inputSlugs, parsed, promoted, review, warnings, llmResp.Model)); err != nil {
 		return Report{}, err
 	}
 	reviewSlug := ""
 	if len(review) > 0 {
-		reviewSlug = "dreams/review/dream-" + date.Format("2006-01-02")
+		reviewSlug = "dreams/review/dream-" + runSuffix
 		if err := s.FS.WritePage(reviewSlug, renderReviewPage(date, review, inputSlugs)); err != nil {
 			return Report{}, err
 		}
@@ -151,6 +152,20 @@ func (s *Service) now() time.Time {
 		return s.Now()
 	}
 	return time.Now()
+}
+
+func runSlugSuffix(t time.Time) string {
+	if t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0 {
+		return t.Format("2006-01-02")
+	}
+	return t.Format("2006-01-02-1504")
+}
+
+func runLabel(t time.Time) string {
+	if t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0 {
+		return t.Format("2006-01-02")
+	}
+	return t.Format("2006-01-02 15:04")
 }
 
 func (s *Service) applyPromotion(p dreamPromotion, pageBySlug map[string]memfs.Page, inputSet map[string]bool, date time.Time) (bool, string) {
@@ -184,6 +199,8 @@ func (s *Service) applyPromotion(p dreamPromotion, pageBySlug map[string]memfs.P
 	if err := s.FS.WritePage(p.TargetSlug, updated); err != nil {
 		return false, err.Error()
 	}
+	page.Raw = updated
+	pageBySlug[p.TargetSlug] = page
 	return true, ""
 }
 
@@ -245,7 +262,7 @@ func isDreamInput(slug string) bool {
 }
 
 func dreamSystemPrompt() string {
-	return strings.TrimSpace(fmt.Sprintf(`You are jazmem's nightly memory consolidation job.
+	return strings.TrimSpace(fmt.Sprintf(`You are jazmem's periodic memory consolidation job.
 
 Extract durable memory candidates from input notes. Be conservative.
 Promote only high-confidence facts, preferences, decisions, open loops, and stable relationships that are directly supported by sources.
@@ -318,12 +335,13 @@ func parseDream(content string) (llmDream, []string) {
 
 func renderRunPage(date time.Time, inputs []string, parsed llmDream, promoted []dreamPromotion, review []dreamReview, warnings []string, model string) string {
 	var b strings.Builder
+	label := runLabel(date)
 	b.WriteString(memfs.FrontmatterString(map[string]string{
-		"title": "Dream " + date.Format("2006-01-02"),
+		"title": "Dream " + label,
 		"type":  "dream_run",
 		"date":  date.Format("2006-01-02"),
 	}))
-	fmt.Fprintf(&b, "# Dream %s\n\n", date.Format("2006-01-02"))
+	fmt.Fprintf(&b, "# Dream %s\n\n", label)
 	fmt.Fprintf(&b, "- Model: `%s`\n", model)
 	if parsed.Summary != "" {
 		fmt.Fprintf(&b, "- Summary: %s\n", parsed.Summary)
@@ -376,13 +394,14 @@ func renderRunPage(date time.Time, inputs []string, parsed llmDream, promoted []
 
 func renderReviewPage(date time.Time, review []dreamReview, inputs []string) string {
 	var b strings.Builder
+	label := runLabel(date)
 	b.WriteString(memfs.FrontmatterString(map[string]string{
-		"title": "Dream Review " + date.Format("2006-01-02"),
+		"title": "Dream Review " + label,
 		"type":  "dream_review",
 		"date":  date.Format("2006-01-02"),
 	}))
-	fmt.Fprintf(&b, "# Dream Review %s\n\n", date.Format("2006-01-02"))
-	b.WriteString("These candidates were not promoted automatically. Promote by editing canonical markdown directly, then run `jazmem index`.\n\n")
+	fmt.Fprintf(&b, "# Dream Review %s\n\n", label)
+	b.WriteString("These candidates were not promoted automatically. Promote by editing canonical markdown directly; Jaz owns indexing and maintenance.\n\n")
 	b.WriteString("## Inputs\n\n")
 	for _, slug := range inputs {
 		fmt.Fprintf(&b, "- [[%s]]\n", slug)

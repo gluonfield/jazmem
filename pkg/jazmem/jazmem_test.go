@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ import (
 func TestRawMarkdownReindexSearchAndDream(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
-	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.Local)
 	llm := fakeProvider(t, `{"summary":"Promoted durable jazmem search note.","promotions":[{"target_slug":"notes/jazmem-search","section":"Current","bullet":"- Alice and Riley are testing jazmem search. [Source: [[inbox/alice-riley-note]], 2026-06-08]","confidence":"high","source_slugs":["inbox/alice-riley-note"]}],"review":[],"skipped":[]}`)
 	defer llm.Close()
 	mem, err := Open(Config{Root: root, DBPath: dbPath, Now: func() time.Time { return now }, APIKey: "test-key", ProviderEndpoint: llm.URL, Model: "test-model", ReasoningEffort: "medium"})
@@ -56,12 +57,213 @@ func TestRawMarkdownReindexSearchAndDream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.RunSlug != "dreams/runs/2026-06-08" || len(report.InputSlugs) == 0 || report.Promoted != 1 || report.ModelUsed != "test-model" {
+	if report.RunSlug != "dreams/runs/2026-06-08-1200" || len(report.InputSlugs) == 0 || report.Promoted != 1 || report.ModelUsed != "test-model" {
 		t.Fatalf("unexpected dream report %#v", report)
 	}
 	if _, err := mem.GetPage(context.Background(), report.RunSlug); err != nil {
 		t.Fatalf("dream run page missing: %v", err)
 	}
+}
+
+func TestDreamKeepsMultiplePromotionsToSamePage(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.Local)
+	llm := fakeProvider(t, `{"summary":"Promoted two notes.","promotions":[{"target_slug":"projects/jazmem","section":"Current","bullet":"- Jazmem keeps markdown as the source of truth. [Source: [[inbox/jazmem-note]], 2026-06-08]","confidence":"high","source_slugs":["inbox/jazmem-note"]},{"target_slug":"projects/jazmem","section":"Open Loops","bullet":"- Jazmem still needs stronger dream consolidation. [Source: [[inbox/jazmem-note]], 2026-06-08]","confidence":"high","source_slugs":["inbox/jazmem-note"]}],"review":[],"skipped":[]}`)
+	defer llm.Close()
+	mem, err := Open(Config{Root: root, DBPath: dbPath, Now: func() time.Time { return now }, APIKey: "test-key", ProviderEndpoint: llm.URL, Model: "test-model", ReasoningEffort: "medium"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	if err := mem.fs.WritePage("inbox/jazmem-note", "---\ntitle: Jazmem note\ntype: inbox\n---\n\n# Jazmem note\n\nJazmem keeps markdown as source of truth and needs stronger dream consolidation.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.fs.WritePage("projects/jazmem", "---\ntitle: Jazmem\n---\n\n# Jazmem\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := mem.Dream(context.Background(), DreamOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Promoted != 2 {
+		t.Fatalf("promoted = %d, want 2; report %#v", report.Promoted, report)
+	}
+	page, err := mem.GetPage(context.Background(), "projects/jazmem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(page.Raw, "markdown as the source of truth") || !strings.Contains(page.Raw, "stronger dream consolidation") {
+		t.Fatalf("expected both promotions to survive, got:\n%s", page.Raw)
+	}
+}
+
+func TestDreamUsesConfiguredRunnerAndReindexes(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.Local)
+	runner := fakeDreamRunner{
+		run: func(_ context.Context, req DreamRequest) (DreamReport, error) {
+			if req.Root != root || req.DBPath != dbPath || !req.Date.Equal(now) {
+				return DreamReport{}, fmt.Errorf("unexpected dream request %#v", req)
+			}
+			path := filepath.Join(req.Root, "projects", "agent-dream.md")
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return DreamReport{}, err
+			}
+			if err := os.WriteFile(path, []byte("---\ntitle: Agent Dream\n---\n\n# Agent Dream\n\nAgent-backed dream wrote this canonical page.\n"), 0o644); err != nil {
+				return DreamReport{}, err
+			}
+			return DreamReport{RunSlug: "dreams/runs/agent-test", ModelUsed: "acp:codex"}, nil
+		},
+	}
+	mem, err := Open(Config{
+		Root:        root,
+		DBPath:      dbPath,
+		Now:         func() time.Time { return now },
+		DreamRunner: runner,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	report, err := mem.Dream(context.Background(), DreamOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.RunSlug != "dreams/runs/agent-test" || report.ModelUsed != "acp:codex" {
+		t.Fatalf("unexpected report %#v", report)
+	}
+	results, err := mem.Search(context.Background(), "agent backed dream", SearchOptions{Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slugsContain(results, "projects/agent-dream") {
+		t.Fatalf("custom dream page was not indexed: %#v", results)
+	}
+}
+
+func TestDreamReindexesAfterConfiguredRunnerFailure(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	runner := fakeDreamRunner{
+		run: func(_ context.Context, req DreamRequest) (DreamReport, error) {
+			path := filepath.Join(req.Root, "projects", "partial-dream.md")
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return DreamReport{}, err
+			}
+			if err := os.WriteFile(path, []byte("---\ntitle: Partial Dream\n---\n\n# Partial Dream\n\nPartial custom dream output should still be searchable.\n"), 0o644); err != nil {
+				return DreamReport{}, err
+			}
+			return DreamReport{RunSlug: "dreams/runs/partial-test", ModelUsed: "acp:codex"}, errors.New("runner stopped after editing")
+		},
+	}
+	mem, err := Open(Config{Root: root, DBPath: dbPath, DreamRunner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	if _, err := mem.Dream(context.Background(), DreamOptions{}); err == nil {
+		t.Fatal("expected runner error")
+	}
+	results, err := mem.Search(context.Background(), "partial custom dream output", SearchOptions{Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slugsContain(results, "projects/partial-dream") {
+		t.Fatalf("partial custom dream page was not indexed after failure: %#v", results)
+	}
+}
+
+func TestDreamValidatesHorizonsAfterConfiguredRunner(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	runner := fakeDreamRunner{
+		run: func(_ context.Context, req DreamRequest) (DreamReport, error) {
+			if err := os.WriteFile(filepath.Join(req.Root, ShortTermFile), []byte("# Wrong\n\n- nope\n"), 0o644); err != nil {
+				return DreamReport{}, err
+			}
+			return DreamReport{RunSlug: "dreams/runs/invalid-horizon", ModelUsed: "acp:codex"}, nil
+		},
+	}
+	mem, err := Open(Config{Root: root, DBPath: dbPath, DreamRunner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	if _, err := mem.Dream(context.Background(), DreamOptions{}); err == nil || !strings.Contains(err.Error(), ShortTermFile) {
+		t.Fatalf("expected short-term horizon validation error, got %v", err)
+	}
+}
+
+func TestRunDreamTaskRecordsIndexAndDreamTasks(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.Local)
+	runner := fakeDreamRunner{
+		run: func(_ context.Context, req DreamRequest) (DreamReport, error) {
+			path := filepath.Join(req.Root, "projects", "manual-dream.md")
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return DreamReport{}, err
+			}
+			if err := os.WriteFile(path, []byte("---\ntitle: Manual Dream\n---\n\n# Manual Dream\n\nManual dream task should be indexed and recorded.\n"), 0o644); err != nil {
+				return DreamReport{}, err
+			}
+			return DreamReport{RunSlug: "dreams/runs/manual", ModelUsed: "acp:codex"}, nil
+		},
+	}
+	mem, err := Open(Config{
+		Root:        root,
+		DBPath:      dbPath,
+		Now:         func() time.Time { return now },
+		DreamRunner: runner,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	report, err := mem.RunDreamTask(context.Background(), DreamOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Dream.RunSlug != "dreams/runs/manual" || report.Index.PageCount != 0 {
+		t.Fatalf("unexpected manual dream report %#v", report)
+	}
+	tasks, err := mem.SchedulerStatus(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]TaskStatus{}
+	for _, task := range tasks {
+		byName[task.Name] = task
+	}
+	for _, name := range []string{TaskIndexChangedPages, TaskDream} {
+		task := byName[name]
+		if task.Status != "ok" || !task.LastRunAt.Equal(now) {
+			t.Fatalf("%s task not recorded after manual dream: %#v", name, task)
+		}
+	}
+	results, err := mem.Search(context.Background(), "manual dream task", SearchOptions{Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slugsContain(results, "projects/manual-dream") {
+		t.Fatalf("manual dream page was not indexed: %#v", results)
+	}
+}
+
+type fakeDreamRunner struct {
+	run func(context.Context, DreamRequest) (DreamReport, error)
+}
+
+func (f fakeDreamRunner) RunDream(ctx context.Context, req DreamRequest) (DreamReport, error) {
+	return f.run(ctx, req)
 }
 
 func TestReindexFindsExplicitAndMentionLinks(t *testing.T) {

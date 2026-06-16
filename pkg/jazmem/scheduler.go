@@ -2,10 +2,20 @@ package jazmem
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/gluonfield/jazmem/internal/scheduler"
 	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
+)
+
+const (
+	TaskIndexChangedPages = "index_changed_pages"
+	TaskIngestSources     = "ingest_sources"
+	TaskDailyRollup       = "daily_rollup"
+	TaskLinkHygiene       = "link_hygiene"
+	TaskDream             = "dream"
+	TaskOptimizeIndex     = "optimize_index"
 )
 
 type taskSpec struct {
@@ -66,25 +76,84 @@ func weeklySpec(name string, hour int, run func(context.Context) error) taskSpec
 
 func (m *Memory) taskSpecs() []taskSpec {
 	return []taskSpec{
-		intervalSpec("index_changed_pages", time.Minute, func(ctx context.Context) error {
-			_, err := m.Reindex(ctx, ReindexOptions{})
-			return err
+		intervalSpec(TaskIndexChangedPages, time.Minute, func(ctx context.Context) error {
+			return m.runMaintenance(ctx, func(ctx context.Context) error {
+				_, err := m.Reindex(ctx, ReindexOptions{})
+				return err
+			})
 		}),
-		intervalSpec("ingest_sources", 20*time.Minute, func(ctx context.Context) error {
-			_, err := m.ingester.Run(ctx)
-			return err
+		intervalSpec(TaskIngestSources, 20*time.Minute, func(ctx context.Context) error {
+			return m.runMaintenance(ctx, func(ctx context.Context) error {
+				_, err := m.ingester.Run(ctx)
+				return err
+			})
 		}),
-		dailySpec("daily_rollup", 0, m.dailyRollup),
-		dailySpec("link_hygiene", 2, func(ctx context.Context) error {
-			_, err := m.LinkHygiene(ctx)
-			return err
+		dailySpec(TaskDailyRollup, 0, func(ctx context.Context) error {
+			return m.runMaintenance(ctx, m.dailyRollup)
 		}),
-		dailySpec("dream", 3, func(ctx context.Context) error {
-			_, err := m.Dream(ctx, DreamOptions{})
-			return err
+		dailySpec(TaskLinkHygiene, 2, func(ctx context.Context) error {
+			return m.runMaintenance(ctx, func(ctx context.Context) error {
+				_, err := m.LinkHygiene(ctx)
+				return err
+			})
 		}),
-		weeklySpec("optimize_index", 4, m.store.Optimize),
+		intervalSpec(TaskDream, 6*time.Hour, func(ctx context.Context) error {
+			return m.runMaintenance(ctx, func(ctx context.Context) error {
+				_, err := m.Dream(ctx, DreamOptions{})
+				return err
+			})
+		}),
+		weeklySpec(TaskOptimizeIndex, 4, func(ctx context.Context) error {
+			return m.runMaintenance(ctx, m.store.Optimize)
+		}),
 	}
+}
+
+func (m *Memory) RunIndexTask(ctx context.Context) (Report, error) {
+	runAt := m.timeNow()
+	var report Report
+	err := m.runMaintenance(ctx, func(ctx context.Context) error {
+		var err error
+		report, err = m.Reindex(ctx, ReindexOptions{})
+		recordErr := m.recordTaskResult(ctx, TaskIndexChangedPages, runAt, err)
+		return errors.Join(err, recordErr)
+	})
+	return report, err
+}
+
+func (m *Memory) RunDreamTask(ctx context.Context, opts DreamOptions) (DreamTaskReport, error) {
+	runAt := m.timeNow()
+	var report DreamTaskReport
+	err := m.runMaintenance(ctx, func(ctx context.Context) error {
+		var indexErr error
+		report.Index, indexErr = m.Reindex(ctx, ReindexOptions{})
+		indexRecordErr := m.recordTaskResult(ctx, TaskIndexChangedPages, runAt, indexErr)
+		if indexErr != nil {
+			dreamRecordErr := m.recordTaskResult(ctx, TaskDream, runAt, indexErr)
+			return errors.Join(indexErr, indexRecordErr, dreamRecordErr)
+		}
+		var dreamErr error
+		report.Dream, dreamErr = m.Dream(ctx, opts)
+		dreamRecordErr := m.recordTaskResult(ctx, TaskDream, runAt, dreamErr)
+		return errors.Join(indexRecordErr, dreamErr, dreamRecordErr)
+	})
+	return report, err
+}
+
+func (m *Memory) runMaintenance(ctx context.Context, run func(context.Context) error) error {
+	m.maintenanceMu.Lock()
+	defer m.maintenanceMu.Unlock()
+	return run(ctx)
+}
+
+func (m *Memory) recordTaskResult(ctx context.Context, task string, runAt time.Time, runErr error) error {
+	status := "ok"
+	errText := ""
+	if runErr != nil {
+		status = "error"
+		errText = runErr.Error()
+	}
+	return m.store.RecordTask(ctx, task, status, runAt, errText)
 }
 
 func (m *Memory) StartScheduler(ctx context.Context) error {
