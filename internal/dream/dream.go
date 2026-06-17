@@ -11,6 +11,7 @@ import (
 	"github.com/gluonfield/jazmem/internal/llm"
 	"github.com/gluonfield/jazmem/internal/memfs"
 	"github.com/gluonfield/jazmem/internal/templates/dreamprompt"
+	"github.com/gluonfield/jazmem/internal/templates/memorypolicy"
 )
 
 type Service struct {
@@ -272,8 +273,8 @@ func isDreamInput(slug string) bool {
 
 func dreamSystemPrompt() (string, error) {
 	return dreamprompt.RenderSystem(dreamprompt.SystemData{
-		LongTermPolicy:  memfs.LongTermDreamGuidance(),
-		ShortTermPolicy: memfs.ShortTermDreamGuidance(),
+		LongTermPolicy:  memorypolicy.RenderLongTerm(),
+		ShortTermPolicy: memorypolicy.RenderShortTerm(),
 	})
 }
 

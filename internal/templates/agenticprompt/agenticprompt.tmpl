@@ -17,9 +17,8 @@ Return strict JSON only:
 Question: {{ .Query }}
 
 Evidence:
-{{- range .Evidence }}
-
+{{ range .Evidence }}
 [{{ .ID }}] slug={{ .Slug }} title={{ .Title }} chunk={{ .Chunk }}
 {{ .Snippet }}
-{{- end }}
+{{ end }}
 {{- end }}

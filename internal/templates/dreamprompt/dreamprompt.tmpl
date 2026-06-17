@@ -44,26 +44,24 @@ Current SHORT_TERM.md:
 {{ .ShortTerm }}
 
 Canonical pages you may edit:
-{{- if .Canonical }}
-{{- range .Canonical }}
-- {{ .Slug }} - {{ .Title }}
-{{- end }}
-{{- else }}
+{{ if .Canonical -}}
+{{ range .Canonical }}- {{ .Slug }} - {{ .Title }}
+{{ end -}}
+{{ else -}}
 - None.
-{{- end }}
+{{ end }}
 
 Input pages:
-{{- if .Inputs }}
-{{- range .Inputs }}
-
+{{ if .Inputs -}}
+{{ range .Inputs }}
 ---
 slug: {{ .Slug }}
 title: {{ .Title }}
 modified: {{ .ModifiedAt }}
 body:
 {{ .Body }}
-{{- end }}
-{{- else }}
+{{ end -}}
+{{ else -}}
 - No eligible input pages.
-{{- end }}
+{{ end -}}
 {{- end }}

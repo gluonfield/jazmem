@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/gluonfield/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/templates/memorypolicy"
 )
 
 // Memory horizons are root-level files injected into agent context every turn,
@@ -20,11 +21,11 @@ func HorizonFiles() []string {
 }
 
 func LongTermDreamGuidance() string {
-	return memfs.LongTermDreamGuidance()
+	return memorypolicy.RenderLongTerm()
 }
 
 func ShortTermDreamGuidance() string {
-	return memfs.ShortTermDreamGuidance()
+	return memorypolicy.RenderShortTerm()
 }
 
 func (m *Memory) ReadHorizonFile(name string) (string, error) {
