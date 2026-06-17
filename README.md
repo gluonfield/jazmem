@@ -49,7 +49,7 @@ jazmem doctor
 
 Root horizon files summarize memory at different time scales:
 
-- `LONG_TERM.md`: durable identity, goals, standing preferences, and important relationships.
+- `LONG_TERM.md`: profile-level identity, major goals, deep standing preferences, and key relationships.
 - `SHORT_TERM.md`: current focus, active projects, and open loops.
 - `daily/YYYY-MM-DD.md`: raw daily log entries and recent events.
 

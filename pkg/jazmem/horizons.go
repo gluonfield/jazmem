@@ -19,6 +19,14 @@ func HorizonFiles() []string {
 	return memfs.HorizonFiles()
 }
 
+func LongTermDreamGuidance() string {
+	return memfs.LongTermDreamGuidance()
+}
+
+func ShortTermDreamGuidance() string {
+	return memfs.ShortTermDreamGuidance()
+}
+
 func (m *Memory) ReadHorizonFile(name string) (string, error) {
 	if !isHorizonFile(name) {
 		return "", fmt.Errorf("unknown horizon file %q", name)
