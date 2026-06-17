@@ -68,18 +68,16 @@ func (c *Client) CompleteJSON(ctx context.Context, req Request) (Response, error
 	if len(req.Messages) == 0 {
 		return Response{}, errors.New("LLM messages are empty")
 	}
-	maxTokens := req.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = 1800
-	}
 	payload := map[string]any{
 		"model":       c.cfg.Model,
 		"messages":    req.Messages,
 		"temperature": 0.1,
-		"max_tokens":  maxTokens,
 		"response_format": map[string]string{
 			"type": "json_object",
 		},
+	}
+	if req.MaxTokens > 0 {
+		payload["max_tokens"] = req.MaxTokens
 	}
 	if c.cfg.ReasoningEffort != "" {
 		payload["reasoning_effort"] = c.cfg.ReasoningEffort

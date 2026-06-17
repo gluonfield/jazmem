@@ -87,7 +87,6 @@ func (s *Service) Run(ctx context.Context, opts Options) (Report, error) {
 	}
 
 	llmResp, err := s.LLM.CompleteJSON(ctx, llm.Request{
-		MaxTokens: 4800,
 		Messages: []llm.Message{
 			{Role: "system", Content: dreamSystemPrompt()},
 			{Role: "user", Content: dreamUserPrompt(date, inputs, canonicalPages(pages), longTerm, shortTerm)},
@@ -262,7 +261,7 @@ func isDreamInput(slug string) bool {
 }
 
 func dreamSystemPrompt() string {
-	return strings.TrimSpace(fmt.Sprintf(`You are jazmem's periodic memory consolidation job.
+	return strings.TrimSpace(`You are jazmem's periodic memory consolidation job.
 
 Extract durable memory candidates from input notes. Be conservative.
 Promote only high-confidence facts, preferences, decisions, open loops, and stable relationships that are directly supported by sources.
@@ -271,9 +270,9 @@ Every promotion bullet must include a [Source: [[source-slug]], YYYY-MM-DD] cita
 Use only these sections: Current, Preferences, Decisions, Open Loops, Relationships, Timeline.
 
 You also maintain two memory horizon files injected into every agent session:
-- LONG_TERM.md (max %d chars): identity, goals, standing preferences, key relationships. Add a fact only when it recurs across days or is a direct user statement. Evict what stopped mattering; evicted facts must already live on a canonical page.
-- SHORT_TERM.md (max %d chars): current focus, active projects, open loops. Refresh from the inputs; drop entries stale for roughly two weeks.
-Return each as the COMPLETE new file content (markdown, starting with its # heading) in long_term / short_term. Return "" to leave a file unchanged. Never exceed the budgets. Keep the user's wording for preferences and goals.
+- LONG_TERM.md: identity, goals, standing preferences, key relationships. Add a fact only when it recurs across days or is a direct user statement. Evict what stopped mattering; evicted facts must already live on a canonical page.
+- SHORT_TERM.md: current focus, active projects, open loops. Refresh from the inputs; drop entries stale for roughly two weeks.
+Return each as the COMPLETE new file content (markdown, starting with its # heading) in long_term / short_term. Return "" to leave a file unchanged. Do not truncate horizon files for length. Keep the user's wording for preferences and goals.
 
 Return strict JSON only:
 {
@@ -293,7 +292,7 @@ Return strict JSON only:
   "skipped": ["noise or non-durable item"],
   "long_term": "",
   "short_term": ""
-}`, memfs.LongTermMaxChars, memfs.ShortTermMaxChars))
+}`)
 }
 
 func dreamUserPrompt(date time.Time, inputs []memfs.Page, canonical []memfs.Page, longTerm, shortTerm string) string {

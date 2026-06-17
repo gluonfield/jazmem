@@ -11,10 +11,8 @@ import (
 // not indexed pages. LONG_TERM.md is dream-maintained and read-only for
 // agents; SHORT_TERM.md is agent-updated and dream-pruned.
 const (
-	LongTermFile      = memfs.LongTermFile
-	ShortTermFile     = memfs.ShortTermFile
-	LongTermMaxChars  = memfs.LongTermMaxChars
-	ShortTermMaxChars = memfs.ShortTermMaxChars
+	LongTermFile  = memfs.LongTermFile
+	ShortTermFile = memfs.ShortTermFile
 )
 
 func HorizonFiles() []string {

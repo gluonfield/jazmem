@@ -72,12 +72,10 @@ func (fs *FileSystem) EnsureLayoutReport() (LayoutReport, error) {
 }
 
 const (
-	LongTermFile      = "LONG_TERM.md"
-	ShortTermFile     = "SHORT_TERM.md"
-	LongTermMaxChars  = 2500
-	ShortTermMaxChars = 1500
-	longTermHeading   = "# Long Term Memory"
-	shortTermHeading  = "# Short Term Memory"
+	LongTermFile     = "LONG_TERM.md"
+	ShortTermFile    = "SHORT_TERM.md"
+	longTermHeading  = "# Long Term Memory"
+	shortTermHeading = "# Short Term Memory"
 )
 
 var horizonSkeletons = map[string]string{
@@ -97,17 +95,6 @@ func HorizonFiles() []string {
 	return []string{LongTermFile, ShortTermFile}
 }
 
-func HorizonMaxChars(name string) (int, bool) {
-	switch name {
-	case LongTermFile:
-		return LongTermMaxChars, true
-	case ShortTermFile:
-		return ShortTermMaxChars, true
-	default:
-		return 0, false
-	}
-}
-
 func HorizonHeading(name string) (string, bool) {
 	switch name {
 	case LongTermFile:
@@ -120,7 +107,7 @@ func HorizonHeading(name string) (string, bool) {
 }
 
 func ValidateHorizonContent(name, content string) error {
-	maxChars, ok := HorizonMaxChars(name)
+	heading, ok := HorizonHeading(name)
 	if !ok {
 		return fmt.Errorf("unknown horizon file %q", name)
 	}
@@ -128,10 +115,6 @@ func ValidateHorizonContent(name, content string) error {
 	if content == "" {
 		return fmt.Errorf("%s content is empty", name)
 	}
-	if len(content) > maxChars {
-		return fmt.Errorf("%s exceeds %d chars", name, maxChars)
-	}
-	heading, _ := HorizonHeading(name)
 	firstLine, _, _ := strings.Cut(content, "\n")
 	if strings.TrimSpace(firstLine) != heading {
 		return fmt.Errorf("%s must start with %q", name, heading)

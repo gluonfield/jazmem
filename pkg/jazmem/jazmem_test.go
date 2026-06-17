@@ -201,6 +201,40 @@ func TestDreamValidatesHorizonsAfterConfiguredRunner(t *testing.T) {
 	}
 }
 
+func TestDreamAllowsLargeHorizonsAfterConfiguredRunner(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	largeLongTerm := "# Long Term Memory\n\n" + strings.Repeat("- Durable relationship/context detail. [Source: User, chat, 2026-06-10]\n", 80)
+	runner := fakeDreamRunner{
+		run: func(_ context.Context, req DreamRequest) (DreamReport, error) {
+			if err := os.WriteFile(filepath.Join(req.Root, LongTermFile), []byte(largeLongTerm), 0o644); err != nil {
+				return DreamReport{}, err
+			}
+			return DreamReport{RunSlug: "dreams/runs/large-horizon", ModelUsed: "acp:codex"}, nil
+		},
+	}
+	mem, err := Open(Config{Root: root, DBPath: dbPath, DreamRunner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	report, err := mem.Dream(context.Background(), DreamOptions{})
+	if err != nil {
+		t.Fatalf("large horizon should not fail validation: %v", err)
+	}
+	if report.RunSlug != "dreams/runs/large-horizon" {
+		t.Fatalf("unexpected dream report %#v", report)
+	}
+	content, err := mem.ReadHorizonFile(LongTermFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content != largeLongTerm {
+		t.Fatalf("large horizon changed: %q", content)
+	}
+}
+
 func TestRunDreamTaskRecordsIndexAndDreamTasks(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")

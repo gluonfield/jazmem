@@ -197,8 +197,12 @@ func TestHorizonReadWriteAndSchedulerStatus(t *testing.T) {
 	if err := mem.WriteHorizonFile(LongTermFile, "# Long Term Memory\n\n- Goal: $5m."); err != nil {
 		t.Fatal(err)
 	}
+	largeLongTerm := "# Long Term Memory\n\n" + strings.Repeat("- Durable relationship/context detail. [Source: User, chat, 2026-06-10]\n", 80)
+	if err := mem.WriteHorizonFile(LongTermFile, largeLongTerm); err != nil {
+		t.Fatalf("large horizon write should not be capped: %v", err)
+	}
 	content, err := mem.ReadHorizonFile(LongTermFile)
-	if err != nil || !strings.Contains(content, "$5m") {
+	if err != nil || content != largeLongTerm {
 		t.Fatalf("horizon roundtrip failed: %q %v", content, err)
 	}
 	if err := mem.WriteHorizonFile("AGENTS.md", "nope"); err == nil {
