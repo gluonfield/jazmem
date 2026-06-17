@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gluonfield/jazmem/internal/llm"
+	"github.com/gluonfield/jazmem/internal/templates/agenticprompt"
 )
 
 type agenticParsed struct {
@@ -147,11 +148,19 @@ func (m *Memory) synthesizeAgentic(ctx context.Context, query string, response S
 }
 
 func (m *Memory) completeAgentic(ctx context.Context, query string, evidence []agenticEvidenceItem) (agenticParsed, llm.Response, error) {
+	systemPrompt, err := agenticSystemPrompt()
+	if err != nil {
+		return agenticParsed{}, llm.Response{}, err
+	}
+	userPrompt, err := agenticUserPrompt(query, evidence)
+	if err != nil {
+		return agenticParsed{}, llm.Response{}, err
+	}
 	llmResp, err := m.llm.CompleteJSON(ctx, llm.Request{
 		MaxTokens: 2200,
 		Messages: []llm.Message{
-			{Role: "system", Content: agenticSystemPrompt()},
-			{Role: "user", Content: agenticUserPrompt(query, evidence)},
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
 		},
 	})
 	if err != nil {
@@ -187,30 +196,25 @@ func cleanFollowupQueries(queries []string, original string) []string {
 	return out
 }
 
-func agenticSystemPrompt() string {
-	return strings.TrimSpace(`You are jazmem's memory answerer.
-
-Answer only from the supplied evidence. Do not use outside knowledge.
-If the evidence is insufficient, say what is known and put missing information in gaps.
-Ground every substantive claim in citation_ids that refer to supplied evidence ids.
-When gaps remain, propose up to 3 followup_queries built from concrete nouns and names likely to retrieve the missing evidence; they are executed only when deep retrieval is enabled.
-Return strict JSON only:
-{
-  "answer": "concise prose answer",
-  "citation_ids": [1, 2],
-  "gaps": ["important missing information"],
-  "warnings": ["optional retrieval or evidence warnings"],
-  "followup_queries": ["optional search queries to fill gaps"]
-}`)
+func agenticSystemPrompt() (string, error) {
+	return agenticprompt.RenderSystem()
 }
 
-func agenticUserPrompt(query string, evidence []agenticEvidenceItem) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "Question: %s\n\nEvidence:\n", strings.TrimSpace(query))
+func agenticUserPrompt(query string, evidence []agenticEvidenceItem) (string, error) {
+	promptEvidence := make([]agenticprompt.Evidence, 0, len(evidence))
 	for _, item := range evidence {
-		fmt.Fprintf(&b, "\n[%d] slug=%s title=%s chunk=%d\n%s\n", item.ID, item.Citation.Slug, item.Citation.Title, item.Citation.Chunk, item.Snippet)
+		promptEvidence = append(promptEvidence, agenticprompt.Evidence{
+			ID:      item.ID,
+			Slug:    item.Citation.Slug,
+			Title:   item.Citation.Title,
+			Chunk:   item.Citation.Chunk,
+			Snippet: item.Snippet,
+		})
 	}
-	return b.String()
+	return agenticprompt.RenderUser(agenticprompt.UserData{
+		Query:    strings.TrimSpace(query),
+		Evidence: promptEvidence,
+	})
 }
 
 func citationsFromIDs(ids []int, byID map[int]Citation) ([]Citation, []string) {

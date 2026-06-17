@@ -10,6 +10,7 @@ import (
 
 	"github.com/gluonfield/jazmem/internal/llm"
 	"github.com/gluonfield/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/templates/dreamprompt"
 )
 
 type Service struct {
@@ -86,10 +87,19 @@ func (s *Service) Run(ctx context.Context, opts Options) (Report, error) {
 		return Report{}, err
 	}
 
+	systemPrompt, err := dreamSystemPrompt()
+	if err != nil {
+		return Report{}, err
+	}
+	userPrompt, err := dreamUserPrompt(date, inputs, canonicalPages(pages), longTerm, shortTerm)
+	if err != nil {
+		return Report{}, err
+	}
+
 	llmResp, err := s.LLM.CompleteJSON(ctx, llm.Request{
 		Messages: []llm.Message{
-			{Role: "system", Content: dreamSystemPrompt()},
-			{Role: "user", Content: dreamUserPrompt(date, inputs, canonicalPages(pages), longTerm, shortTerm)},
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
 		},
 	})
 	if err != nil {
@@ -260,67 +270,41 @@ func isDreamInput(slug string) bool {
 	return false
 }
 
-func dreamSystemPrompt() string {
-	return strings.TrimSpace(fmt.Sprintf(`You are jazmem's periodic memory consolidation job.
-
-Extract durable memory candidates from input notes. Be conservative.
-Promote only high-confidence facts, preferences, decisions, open loops, and stable relationships that are directly supported by sources.
-Do not invent target pages. Do not promote ambiguous claims. Put ambiguous or risky candidates into review.
-Every promotion bullet must include a [Source: [[source-slug]], YYYY-MM-DD] citation and must be a single markdown list item.
-Use only these sections: Current, Preferences, Decisions, Open Loops, Relationships, Timeline.
-
-You also maintain two memory horizon files injected into every agent session:
-- LONG_TERM.md: profile-level identity, major goals, deep standing preferences, key relationships. Add only facts that satisfy the long-term horizon policy. Evict what stopped mattering; evicted facts must already live on a canonical page.
-- SHORT_TERM.md: current focus, active projects, open loops. Refresh from the inputs; drop entries stale for roughly two weeks.
-
-Long-term horizon policy:
-%s
-
-Short-term horizon policy:
-%s
-
-Return each as the COMPLETE new file content (markdown, starting with its # heading) in long_term / short_term. Return "" to leave a file unchanged. Do not truncate horizon files for length. Keep the user's wording for preferences and goals.
-
-Return strict JSON only:
-{
-  "summary": "brief run summary",
-  "promotions": [
-    {
-      "target_slug": "people/alice",
-      "section": "Open Loops",
-      "bullet": "- Clarify the Acme follow-up. [Source: [[inbox/acme-note]], 2026-06-08]",
-      "confidence": "high",
-      "source_slugs": ["inbox/acme-note"]
-    }
-  ],
-  "review": [
-    {"candidate": "possible fact", "reason": "why not promoted", "source_slugs": ["inbox/acme-note"]}
-  ],
-  "skipped": ["noise or non-durable item"],
-  "long_term": "",
-  "short_term": ""
-}`, memfs.LongTermDreamGuidance(), memfs.ShortTermDreamGuidance()))
+func dreamSystemPrompt() (string, error) {
+	return dreamprompt.RenderSystem(dreamprompt.SystemData{
+		LongTermPolicy:  memfs.LongTermDreamGuidance(),
+		ShortTermPolicy: memfs.ShortTermDreamGuidance(),
+	})
 }
 
-func dreamUserPrompt(date time.Time, inputs []memfs.Page, canonical []memfs.Page, longTerm, shortTerm string) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "Dream date: %s\n\nCurrent LONG_TERM.md:\n%s\n\nCurrent SHORT_TERM.md:\n%s\n\nCanonical pages you may edit:\n", date.Format("2006-01-02"), strings.TrimSpace(longTerm), strings.TrimSpace(shortTerm))
+func dreamUserPrompt(date time.Time, inputs []memfs.Page, canonical []memfs.Page, longTerm, shortTerm string) (string, error) {
+	canonicalPrompt := make([]dreamprompt.Page, 0, len(canonical))
 	for _, page := range canonical {
-		fmt.Fprintf(&b, "- %s — %s\n", page.Slug, page.Title)
+		canonicalPrompt = append(canonicalPrompt, dreamprompt.Page{
+			Slug:  page.Slug,
+			Title: page.Title,
+		})
 	}
-	b.WriteString("\nInput pages:\n")
-	if len(inputs) == 0 {
-		b.WriteString("- No eligible input pages.\n")
-		return b.String()
-	}
+	inputPrompt := make([]dreamprompt.Page, 0, len(inputs))
 	for _, page := range inputs {
 		body := strings.TrimSpace(page.Body)
 		if len(body) > 1800 {
 			body = body[:1800] + "\n...[truncated]"
 		}
-		fmt.Fprintf(&b, "\n---\nslug: %s\ntitle: %s\nmodified: %s\nbody:\n%s\n", page.Slug, page.Title, page.ModifiedAt.Format(time.RFC3339), body)
+		inputPrompt = append(inputPrompt, dreamprompt.Page{
+			Slug:       page.Slug,
+			Title:      page.Title,
+			ModifiedAt: page.ModifiedAt.Format(time.RFC3339),
+			Body:       body,
+		})
 	}
-	return b.String()
+	return dreamprompt.RenderUser(dreamprompt.UserData{
+		Date:      date.Format("2006-01-02"),
+		LongTerm:  strings.TrimSpace(longTerm),
+		ShortTerm: strings.TrimSpace(shortTerm),
+		Canonical: canonicalPrompt,
+		Inputs:    inputPrompt,
+	})
 }
 
 func parseDream(content string) (llmDream, []string) {
