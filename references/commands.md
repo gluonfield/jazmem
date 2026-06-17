@@ -227,6 +227,8 @@ MCP client config:
 Tools:
 
 - `memory_search`: input `{ "query": "...", "deep": true }` (`deep` optional); output `AgenticResponse`; requires the configured provider's key, such as `OPENROUTER_API_KEY` or `OPENAI_API_KEY`.
-- `memory_get`: input `{ "slug": "people/alice" }`; primary text content is raw markdown. Structured output is `{ "found": true, "slug": "...", "path": "...", "title": "...", "raw": "..." }` or `{ "found": false, "error": "not found: people/alice", "suggestions": [...] }`.
+- `memory_get_page`: input `{ "path": "people/alice" }`; primary text content is raw markdown. Structured output is compact page metadata such as `{ "found": true, "path": "...", "aliases": [...], "modified_at": "...", "links": [...], "backlinks": [...] }` or `{ "found": false, "error": "not found: people/alice", "suggestions": [...] }`.
+
+Embedders can also attach raw worker tools from `pkg/jazmemhttp`: `jazmem_search_raw` for ranked retrieval and `jazmem_get_page` for raw page reads.
 
 MCP is read-only. There is no MCP write/capture/index/dream tool. To store data, edit markdown directly. Indexing, dreaming, and link hygiene are CLI/server/scheduler operations.

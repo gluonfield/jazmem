@@ -16,6 +16,15 @@ type MCPMemory interface {
 	GetPage(context.Context, string) (jazmem.Page, error)
 }
 
+type RawMCPMemory interface {
+	Retrieve(context.Context, string, jazmem.SearchOptions) (jazmem.SearchResponse, error)
+	GetPage(context.Context, string) (jazmem.Page, error)
+}
+
+type MCPPageReader interface {
+	GetPage(context.Context, string) (jazmem.Page, error)
+}
+
 func AddMCPTools(server *mcp.Server, memory MCPMemory) {
 	mcpapi.AddTools(server, memory)
 }
@@ -24,8 +33,28 @@ func RemoveMCPTools(server *mcp.Server) {
 	mcpapi.RemoveTools(server)
 }
 
+func AddMCPGetPageTool(server *mcp.Server, memory MCPPageReader) {
+	mcpapi.AddGetPageTool(server, memory)
+}
+
+func RemoveMCPGetPageTool(server *mcp.Server) {
+	mcpapi.RemoveGetPageTool(server)
+}
+
+func AddRawMCPTools(server *mcp.Server, memory RawMCPMemory) {
+	mcpapi.AddRawTools(server, memory)
+}
+
+func RemoveRawMCPTools(server *mcp.Server) {
+	mcpapi.RemoveRawTools(server)
+}
+
 func MCPToolNames() []string {
 	return mcpapi.ToolNames()
+}
+
+func RawMCPToolNames() []string {
+	return mcpapi.RawToolNames()
 }
 
 // NewMCPServer returns the in-process MCP server for one Memory.

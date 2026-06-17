@@ -174,7 +174,7 @@ func TestMCPEndpointUsesServerMemory(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names[tool.Name] = true
 	}
-	if !names["memory_search"] || !names["memory_get"] {
+	if !names["memory_search"] || !names["memory_get_page"] {
 		t.Fatalf("unexpected MCP tools %#v", names)
 	}
 
@@ -198,8 +198,8 @@ func TestMCPEndpointUsesServerMemory(t *testing.T) {
 	}
 
 	pageCall, err := session.CallTool(t.Context(), &mcp.CallToolParams{
-		Name:      "memory_get",
-		Arguments: map[string]any{"slug": "people/alice-http-mcp"},
+		Name:      "memory_get_page",
+		Arguments: map[string]any{"path": "people/alice-http-mcp"},
 	})
 	if err != nil {
 		t.Fatal(err)

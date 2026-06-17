@@ -122,6 +122,10 @@ The MCP tools are intentionally compact so agent responses stay token-efficient:
 search returns grounded snippets and citations, while page reads return the
 markdown content needed for the task.
 
+- `memory_search`: provider-backed answer with citations and gaps.
+- `memory_get_page`: raw markdown as text content, with compact structured
+  metadata, links/backlinks, and near-miss suggestions.
+
 ## Environment
 
 Most settings can be provided by flags. Environment variables are useful for

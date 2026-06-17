@@ -46,12 +46,12 @@ func TestServerTools(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names[tool.Name] = true
 	}
-	if len(names) != 2 || !names["memory_search"] || !names["memory_get"] {
+	if len(names) != 2 || !names[SearchToolName] || !names[GetPageToolName] {
 		t.Fatalf("unexpected registered tools %#v", names)
 	}
 
 	searchCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "memory_search",
+		Name:      SearchToolName,
 		Arguments: map[string]any{"query": "Alice jazmem MCP"},
 	})
 	if err != nil {
@@ -66,16 +66,17 @@ func TestServerTools(t *testing.T) {
 	}
 
 	pageCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "memory_get",
-		Arguments: map[string]any{"slug": "people/alice-bentick"},
+		Name:      GetPageToolName,
+		Arguments: map[string]any{"path": "people/alice-bentick"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	page := decodeStructured[PageOutput](t, pageCall)
-	if !page.Found || page.Path == "" || page.Slug != "people/alice-bentick" || !strings.Contains(page.Raw, "Alice works on jazmem") {
+	if !page.Found || page.Path != "people/alice-bentick" {
 		t.Fatalf("unexpected page response %#v", page)
 	}
+	assertNoStructuredKeys(t, pageCall, "raw", "slug", "title", "type")
 	if len(pageCall.Content) == 0 {
 		t.Fatal("expected raw markdown text content")
 	}
@@ -85,8 +86,8 @@ func TestServerTools(t *testing.T) {
 	}
 
 	missingCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "memory_get",
-		Arguments: map[string]any{"slug": "people/alice"},
+		Name:      GetPageToolName,
+		Arguments: map[string]any{"path": "people/alice"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,6 +99,44 @@ func TestServerTools(t *testing.T) {
 	missingText, ok := missingCall.Content[0].(*mcp.TextContent)
 	if !ok || !strings.Contains(missingText.Text, "not found: people/alice") || !strings.Contains(missingText.Text, "people/alice-bentick") {
 		t.Fatalf("unexpected missing text content %#v", missingCall.Content)
+	}
+
+	rawServer := mcp.NewServer(&mcp.Implementation{Name: "raw-test", Version: "0.0.1"}, nil)
+	AddRawTools(rawServer, mem)
+	rawSession := connectClient(t, rawServer)
+	defer func() { _ = rawSession.Close() }()
+	rawTools, err := rawSession.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawNames := map[string]bool{}
+	for _, tool := range rawTools.Tools {
+		rawNames[tool.Name] = true
+	}
+	if len(rawNames) != 2 || !rawNames[RawSearchToolName] || !rawNames[RawGetPageToolName] {
+		t.Fatalf("unexpected raw tools %#v", rawNames)
+	}
+	rawSearchCall, err := rawSession.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      RawSearchToolName,
+		Arguments: map[string]any{"query": "Alice jazmem MCP"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawSearch := decodeStructured[jazmem.SearchResponse](t, rawSearchCall)
+	if len(rawSearch.Results) == 0 || rawSearch.Results[0].Slug != "people/alice-bentick" {
+		t.Fatalf("unexpected raw search response %#v", rawSearch)
+	}
+	rawPageCall, err := rawSession.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      RawGetPageToolName,
+		Arguments: map[string]any{"path": "memory/people/alice-bentick.md"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawPage := decodeStructured[PageOutput](t, rawPageCall)
+	if !rawPage.Found || rawPage.Path != "people/alice-bentick" {
+		t.Fatalf("unexpected raw page response %#v", rawPage)
 	}
 }
 
@@ -160,4 +199,21 @@ func decodeStructured[T any](t *testing.T, result *mcp.CallToolResult) T {
 		t.Fatalf("decode structured content: %v\n%s", err, string(data))
 	}
 	return out
+}
+
+func assertNoStructuredKeys(t *testing.T, result *mcp.CallToolResult, keys ...string) {
+	t.Helper()
+	data, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("decode structured content: %v\n%s", err, string(data))
+	}
+	for _, key := range keys {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("structured content unexpectedly contains %q: %s", key, string(data))
+		}
+	}
 }

@@ -89,10 +89,10 @@ Details: [references/writing-memory.md](references/writing-memory.md). Commands/
 
 ## MCP Tools
 
-Served by jaz at `http://127.0.0.1:5299/mcp/jazmem` (or standalone `jazmem-server` at `:9477/mcp`). Read-only — writes happen by editing markdown.
+Served by jaz at `http://127.0.0.1:5299/mcp/jaztools` for Jaz agents, and by standalone `jazmem-server` at `:9477/mcp`. Read-only — writes happen by editing markdown.
 
 - `memory_search`: agentic cited answer; `deep: true` when thin.
-- `memory_get`: raw markdown + links/backlinks + near-miss suggestions.
+- `memory_get_page`: raw markdown as text content, with compact metadata, links/backlinks, and near-miss suggestions.
 
 ## Maintenance
 

@@ -15,10 +15,20 @@ func TestMCPToolRegistration(t *testing.T) {
 	session := connectTestClient(t, server)
 	defer func() { _ = session.Close() }()
 
-	assertTools(t, session, "memory_search", "memory_get")
+	assertTools(t, session, "memory_search", "memory_get_page")
 
 	RemoveMCPTools(server)
 
+	assertTools(t, session)
+
+	AddMCPGetPageTool(server, fakeMCPMemory{})
+	assertTools(t, session, "memory_get_page")
+	RemoveMCPGetPageTool(server)
+	assertTools(t, session)
+
+	AddRawMCPTools(server, fakeMCPMemory{})
+	assertTools(t, session, "jazmem_search_raw", "jazmem_get_page")
+	RemoveRawMCPTools(server)
 	assertTools(t, session)
 }
 
@@ -26,6 +36,10 @@ type fakeMCPMemory struct{}
 
 func (fakeMCPMemory) AgenticSearch(context.Context, string, jazmem.AgenticOptions) (jazmem.AgenticResponse, error) {
 	return jazmem.AgenticResponse{}, nil
+}
+
+func (fakeMCPMemory) Retrieve(context.Context, string, jazmem.SearchOptions) (jazmem.SearchResponse, error) {
+	return jazmem.SearchResponse{}, nil
 }
 
 func (fakeMCPMemory) GetPage(context.Context, string) (jazmem.Page, error) {
