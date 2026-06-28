@@ -31,6 +31,9 @@ func ensureLayoutResolved(cfg Config) (LayoutReport, error) {
 	if err != nil {
 		return LayoutReport{}, err
 	}
+	if _, err := fs.EnsureDoc(memfs.TaskSchemaSlug, taskSchemaDoc); err != nil {
+		return LayoutReport{}, err
+	}
 	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
 		return LayoutReport{}, err
 	}

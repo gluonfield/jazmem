@@ -53,6 +53,32 @@ func (m *Memory) Reindex(ctx context.Context, _ ReindexOptions) (Report, error) 
 }
 
 func (m *Memory) Dream(ctx context.Context, opts DreamOptions) (DreamReport, error) {
+	report, err := m.runDream(ctx, opts)
+	if err != nil {
+		return report, err
+	}
+	// Task archival is deterministic, runs for both the configured-runner and
+	// internal dream paths, and never deletes a task — it only rolls a residue
+	// onto the linked project page.
+	date := opts.Date
+	if date.IsZero() {
+		date = m.timeNow()
+	}
+	archived, warnings, archiveErr := m.dream.ArchiveDoneTasks(ctx, date.Local())
+	if archiveErr != nil {
+		return report, archiveErr
+	}
+	report.TasksArchived = archived
+	report.Warnings = append(report.Warnings, warnings...)
+	if archived > 0 {
+		if _, err := m.Reindex(ctx, ReindexOptions{}); err != nil {
+			return report, err
+		}
+	}
+	return report, nil
+}
+
+func (m *Memory) runDream(ctx context.Context, opts DreamOptions) (DreamReport, error) {
 	if m.dreamRun != nil {
 		report, err := m.runConfiguredDream(ctx, opts)
 		if !errors.Is(err, ErrDreamRunnerUnavailable) {

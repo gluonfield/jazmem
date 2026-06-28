@@ -145,6 +145,7 @@ type DreamReport struct {
 	Skipped          int      `json:"skipped"`
 	LongTermUpdated  bool     `json:"long_term_updated,omitempty"`
 	ShortTermUpdated bool     `json:"short_term_updated,omitempty"`
+	TasksArchived    int      `json:"tasks_archived,omitempty"`
 	ModelUsed        string   `json:"model_used,omitempty"`
 	Warnings         []string `json:"warnings,omitempty"`
 }

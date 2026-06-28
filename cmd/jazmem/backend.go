@@ -20,6 +20,7 @@ type backend interface {
 	Retrieve(ctx context.Context, query string, opts jazmem.SearchOptions) (jazmem.SearchResponse, error)
 	AgenticSearch(ctx context.Context, query string, opts jazmem.AgenticOptions) (jazmem.AgenticResponse, error)
 	GetPage(ctx context.Context, slug string) (jazmem.Page, error)
+	ListTasks(ctx context.Context, filter jazmem.TaskFilter) ([]jazmem.Task, error)
 	Reindex(ctx context.Context) (jazmem.Report, error)
 	Doctor(ctx context.Context) (jazmem.DoctorReport, error)
 	Dream(ctx context.Context) (jazmem.DreamReport, error)
@@ -169,6 +170,10 @@ func (b *localBackend) AgenticSearch(ctx context.Context, query string, opts jaz
 
 func (b *localBackend) GetPage(ctx context.Context, slug string) (jazmem.Page, error) {
 	return b.memory.GetPage(ctx, slug)
+}
+
+func (b *localBackend) ListTasks(ctx context.Context, filter jazmem.TaskFilter) ([]jazmem.Task, error) {
+	return b.memory.ListTasks(ctx, filter)
 }
 
 func (b *localBackend) Reindex(ctx context.Context) (jazmem.Report, error) {

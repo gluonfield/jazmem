@@ -63,3 +63,28 @@ func RenderAgenticText(response AgenticResponse) string {
 	}
 	return b.String()
 }
+
+// RenderTasksText groups tasks under their status (already ordered by ListTasks)
+// so a person can read the working set at a glance.
+func RenderTasksText(tasks []Task) string {
+	if len(tasks) == 0 {
+		return "No tasks.\n"
+	}
+	var b strings.Builder
+	status := ""
+	for _, task := range tasks {
+		if task.Status != status {
+			if status != "" {
+				b.WriteString("\n")
+			}
+			status = task.Status
+			fmt.Fprintf(&b, "%s\n", strings.ToUpper(status))
+		}
+		fmt.Fprintf(&b, "  %s  (%s)", task.Title, task.Slug)
+		if task.Project != "" {
+			fmt.Fprintf(&b, " → %s", task.Project)
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}

@@ -61,6 +61,8 @@ func run(args []string) error {
 		return runGet(args[1:])
 	case "file":
 		return runFile(args[1:])
+	case "tasks":
+		return runTasks(args[1:])
 	case "dream":
 		return runDream(args[1:])
 	case "link-hygiene":
@@ -347,6 +349,38 @@ func runFile(args []string) error {
 	return nil
 }
 
+func runTasks(args []string) error {
+	fs := flag.NewFlagSet("tasks", flag.ContinueOnError)
+	root := fs.String("root", "", rootHelp)
+	path := fs.String("path", "", "alias for --root")
+	db := fs.String("db", "", dbHelp)
+	status := fs.String("status", "open", "status filter: open, done, all, or an exact status")
+	asJSON := fs.Bool("json", false, "print tasks as JSON instead of text")
+	server := fs.String("server", "", serverHelp)
+	local := fs.Bool("local", false, localHelp)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	selectedRoot, err := resolveRootArg(*root, *path, nil)
+	if err != nil {
+		return err
+	}
+	b, err := openBackend(jazmem.Config{Root: selectedRoot, DBPath: *db}, *server, *local)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = b.Close() }()
+	tasks, err := b.ListTasks(context.Background(), jazmem.TaskFilter{Status: *status})
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return printJSON(tasks)
+	}
+	fmt.Print(jazmem.RenderTasksText(tasks))
+	return nil
+}
+
 func runDream(args []string) error {
 	common, err := parseCommon("dream", args)
 	if err != nil {
@@ -475,7 +509,8 @@ func usage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "       jazmem ask [--deep] <question>          answer with citations (LLM)")
 	_, _ = fmt.Fprintln(w, "       jazmem [--agentic] [--deep] [--text] [--limit n] <query>")
 	_, _ = fmt.Fprintln(w, "       jazmem init [--root path|--path path|path] [--db path]")
-	_, _ = fmt.Fprintln(w, "       jazmem <index|search|get|page|file|dream|link-hygiene|eval|doctor> [--root path] [--db path]")
+	_, _ = fmt.Fprintln(w, "       jazmem tasks [--status open|done|all|<status>] [--json]  list tracked tasks")
+	_, _ = fmt.Fprintln(w, "       jazmem <index|search|get|page|file|tasks|dream|link-hygiene|eval|doctor> [--root path] [--db path]")
 }
 
 func resolveRootArg(root, path string, positional []string) (string, error) {

@@ -53,6 +53,16 @@ func (b *httpBackend) GetPage(ctx context.Context, slug string) (jazmem.Page, er
 	return out, err
 }
 
+func (b *httpBackend) ListTasks(ctx context.Context, filter jazmem.TaskFilter) ([]jazmem.Task, error) {
+	path := "/tasks"
+	if status := strings.TrimSpace(filter.Status); status != "" {
+		path += "?" + url.Values{"status": {status}}.Encode()
+	}
+	var out []jazmem.Task
+	err := b.do(ctx, http.MethodGet, path, &out)
+	return out, err
+}
+
 func (b *httpBackend) Reindex(ctx context.Context) (jazmem.Report, error) {
 	var out jazmem.Report
 	err := b.do(ctx, http.MethodPost, "/reindex", &out)

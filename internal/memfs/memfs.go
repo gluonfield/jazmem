@@ -78,6 +78,11 @@ const (
 	shortTermHeading = "# Short Term Memory"
 )
 
+// TaskSchemaSlug is the reserved self-describing page for the tasks/ lane. Like
+// the horizon files it is seeded by the runtime and excluded from page
+// listing/indexing, so it never registers as a task.
+const TaskSchemaSlug = "tasks/SCHEMA"
+
 var horizonSkeletons = map[string]string{
 	LongTermFile: longTermHeading + `
 
@@ -187,6 +192,59 @@ func (fs *FileSystem) rootFilePath(name string) (string, error) {
 	return filepath.Join(fs.Root, name), nil
 }
 
+func (fs *FileSystem) taskSchemaPath() string {
+	return filepath.Join(fs.Root, filepath.FromSlash(TaskSchemaSlug)+".md")
+}
+
+// EnsureDoc seeds a page when it is missing, the way EnsureHorizonFiles seeds
+// the horizon files. It never overwrites an existing (possibly customized) page.
+func (fs *FileSystem) EnsureDoc(slug, content string) (bool, error) {
+	path, err := fs.PathForSlug(slug)
+	if err != nil {
+		return false, err
+	}
+	if _, err := os.Stat(path); err == nil {
+		return false, nil
+	} else if !os.IsNotExist(err) {
+		return false, err
+	}
+	if err := AtomicWrite(path, []byte(content)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Field returns the page's frontmatter value for key as a trimmed string,
+// formatting YAML-parsed dates (time.Time) back to YYYY-MM-DD. Missing or nil
+// values return "". It is the one place frontmatter scalars are read, so callers
+// in different packages cannot drift on the date-handling detail.
+func (p Page) Field(key string) string {
+	value, ok := p.Frontmatter[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case time.Time:
+		return v.Format("2006-01-02")
+	default:
+		return strings.TrimSpace(fmt.Sprint(v))
+	}
+}
+
+// RefSlug normalizes a page reference written as a bare slug or a [[wikilink]]
+// (optionally with a |display or #anchor) into a clean slug.
+func RefSlug(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimPrefix(value, "[[")
+	value = strings.TrimSuffix(value, "]]")
+	if i := strings.IndexAny(value, "|#"); i >= 0 {
+		value = value[:i]
+	}
+	return CleanSlug(value)
+}
+
 func LayoutDirs() []string {
 	return []string{
 		"daily",
@@ -200,6 +258,7 @@ func LayoutDirs() []string {
 		"projects",
 		"concepts",
 		"notes",
+		"tasks",
 		"dreams",
 		"dreams/runs",
 		"dreams/review",
@@ -221,7 +280,7 @@ func (fs *FileSystem) ListPages() ([]Page, error) {
 		if filepath.Ext(path) != ".md" {
 			return nil
 		}
-		if isHorizonPath(fs.Root, path) {
+		if isHorizonPath(fs.Root, path) || path == fs.taskSchemaPath() {
 			return nil
 		}
 		page, err := fs.ReadPath(path)

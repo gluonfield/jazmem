@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"slices"
 	"sort"
@@ -14,6 +15,11 @@ import (
 	"github.com/gluonfield/jazmem/internal/memfs"
 	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
 )
+
+// frontmatterLinkFields are the frontmatter keys whose values are page
+// references, so a page's structured links (a task's project) ride the same
+// graph as body wikilinks without being duplicated into prose.
+var frontmatterLinkFields = []string{"project"}
 
 const extractorHash = "jazmem-indexer-v1"
 
@@ -119,6 +125,31 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 			}
 		}
 
+		for _, target := range frontmatterLinkTargets(page.Frontmatter) {
+			resolved, reason := resolver.Resolve(target)
+			if resolved == "" {
+				data.Unresolved = append(data.Unresolved, sqlitestore.UnresolvedLinkRecord{
+					FromSlug: page.Slug,
+					Target:   memfs.CleanSlug(target),
+					Reason:   reason,
+					Context:  "frontmatter",
+				})
+				report.UnresolvedLinks++
+				continue
+			}
+			if resolved == page.Slug {
+				continue
+			}
+			data.Links = append(data.Links, sqlitestore.LinkRecord{
+				FromSlug:   page.Slug,
+				ToSlug:     resolved,
+				LinkType:   "reference",
+				LinkSource: "explicit",
+				Display:    slugTail(resolved),
+				Context:    "frontmatter",
+			})
+		}
+
 		for _, mention := range detectMentions(page, clean, gazetteer) {
 			if !slugSet[mention.ToSlug] || mention.ToSlug == page.Slug {
 				continue
@@ -205,6 +236,36 @@ func ExtractExplicitLinks(body string) []ExplicitLink {
 		}
 	}
 	return links
+}
+
+// frontmatterLinkTargets pulls page references out of a page's structured
+// frontmatter fields. It accepts both [[wikilinks]] and bare slugs (anything
+// with a "/" lane prefix), skipping free text so a prose value does not
+// register as a dangling link.
+func frontmatterLinkTargets(fm map[string]any) []string {
+	var targets []string
+	for _, key := range frontmatterLinkFields {
+		value, ok := fm[key]
+		if !ok || value == nil {
+			continue
+		}
+		raw := strings.TrimSpace(fmt.Sprint(value))
+		if raw == "" {
+			continue
+		}
+		if matches := wikiLinkRE.FindAllStringSubmatch(raw, -1); len(matches) > 0 {
+			for _, match := range matches {
+				if target := strings.TrimSpace(strings.SplitN(match[1], "#", 2)[0]); target != "" {
+					targets = append(targets, target)
+				}
+			}
+			continue
+		}
+		if strings.Contains(raw, "/") {
+			targets = append(targets, raw)
+		}
+	}
+	return targets
 }
 
 func StripCode(body string) string {

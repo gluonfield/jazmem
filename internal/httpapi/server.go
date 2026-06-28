@@ -24,6 +24,7 @@ func New(memory *jazmem.Memory) http.Handler {
 	mux.HandleFunc("GET /search", s.search)
 	mux.HandleFunc("GET /page/", s.getPage)
 	mux.HandleFunc("GET /file/", s.getFile)
+	mux.HandleFunc("GET /tasks", s.tasks)
 	mux.HandleFunc("POST /reindex", s.reindex)
 	mux.HandleFunc("POST /dream", s.dream)
 	mux.HandleFunc("POST /link-hygiene", s.linkHygiene)
@@ -96,6 +97,15 @@ func (s *Server) getPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
+}
+
+func (s *Server) tasks(w http.ResponseWriter, r *http.Request) {
+	tasks, err := s.Memory.ListTasks(r.Context(), jazmem.TaskFilter{Status: r.URL.Query().Get("status")})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, tasks)
 }
 
 func (s *Server) getFile(w http.ResponseWriter, r *http.Request) {
