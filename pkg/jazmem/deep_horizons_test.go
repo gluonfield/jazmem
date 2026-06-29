@@ -234,8 +234,13 @@ func TestHorizonReadWriteAndSchedulerStatus(t *testing.T) {
 	for _, task := range tasks {
 		byName[task.Name] = task
 	}
-	if len(tasks) != 6 {
-		t.Fatalf("expected all 6 task specs, got %#v", tasks)
+	if len(tasks) != 5 {
+		t.Fatalf("expected all 5 task specs, got %#v", tasks)
+	}
+	for _, name := range []string{TaskIndexChangedPages, TaskDailyRollup, TaskLinkHygiene, TaskDream, TaskOptimizeIndex} {
+		if _, ok := byName[name]; !ok {
+			t.Fatalf("missing task %s in %#v", name, tasks)
+		}
 	}
 	dream := byName["dream"]
 	if dream.Status != "error" || dream.Error == "" || dream.LastRunAt.IsZero() {

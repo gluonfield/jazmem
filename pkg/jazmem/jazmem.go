@@ -8,7 +8,6 @@ import (
 	"github.com/gluonfield/jazmem/internal/dream"
 	"github.com/gluonfield/jazmem/internal/hygiene"
 	"github.com/gluonfield/jazmem/internal/indexer"
-	"github.com/gluonfield/jazmem/internal/ingest"
 	"github.com/gluonfield/jazmem/internal/llm"
 	"github.com/gluonfield/jazmem/internal/memfs"
 	"github.com/gluonfield/jazmem/internal/search"
@@ -27,7 +26,6 @@ type Memory struct {
 	dream    *dream.Service
 	dreamRun DreamRunner
 	hygiene  *hygiene.Service
-	ingester *ingest.Service
 	llm      *llm.Client
 
 	maintenanceMu sync.Mutex
@@ -59,7 +57,6 @@ func open(cfg Config) (*Memory, error) {
 	m.dreamRun = cfg.DreamRunner
 	m.indexer = &indexer.Indexer{FS: fs, Store: store}
 	m.search = &search.Service{Store: store}
-	m.ingester = &ingest.Service{}
 	m.llm = llm.New(llm.Config{
 		APIKey:          cfg.APIKey,
 		Model:           cfg.Model,

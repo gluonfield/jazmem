@@ -11,7 +11,6 @@ import (
 
 const (
 	TaskIndexChangedPages = "index_changed_pages"
-	TaskIngestSources     = "ingest_sources"
 	TaskDailyRollup       = "daily_rollup"
 	TaskLinkHygiene       = "link_hygiene"
 	TaskDream             = "dream"
@@ -79,12 +78,6 @@ func (m *Memory) taskSpecs() []taskSpec {
 		intervalSpec(TaskIndexChangedPages, time.Minute, func(ctx context.Context) error {
 			return m.runMaintenance(ctx, func(ctx context.Context) error {
 				_, err := m.Reindex(ctx, ReindexOptions{})
-				return err
-			})
-		}),
-		intervalSpec(TaskIngestSources, 20*time.Minute, func(ctx context.Context) error {
-			return m.runMaintenance(ctx, func(ctx context.Context) error {
-				_, err := m.ingester.Run(ctx)
 				return err
 			})
 		}),
