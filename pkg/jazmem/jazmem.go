@@ -19,14 +19,15 @@ type Memory struct {
 	dbPath string
 	now    func() time.Time
 
-	fs       *memfs.FileSystem
-	store    *sqlitestore.Store
-	indexer  *indexer.Indexer
-	search   *search.Service
-	dream    *dream.Service
-	dreamRun DreamRunner
-	hygiene  *hygiene.Service
-	llm      *llm.Client
+	fs               *memfs.FileSystem
+	store            *sqlitestore.Store
+	indexer          *indexer.Indexer
+	search           *search.Service
+	dream            *dream.Service
+	dreamRun         DreamRunner
+	noProviderDreams bool
+	hygiene          *hygiene.Service
+	llm              *llm.Client
 
 	maintenanceMu sync.Mutex
 }
@@ -48,11 +49,12 @@ func open(cfg Config) (*Memory, error) {
 		return nil, err
 	}
 	m := &Memory{
-		root:   root,
-		dbPath: dbPath,
-		now:    cfg.Now,
-		fs:     fs,
-		store:  store,
+		root:             root,
+		dbPath:           dbPath,
+		now:              cfg.Now,
+		fs:               fs,
+		store:            store,
+		noProviderDreams: cfg.DisableProviderDreams,
 	}
 	m.dreamRun = cfg.DreamRunner
 	m.indexer = &indexer.Indexer{FS: fs, Store: store}

@@ -82,6 +82,9 @@ func (m *Memory) runDream(ctx context.Context, opts DreamOptions) (DreamReport, 
 	if m.dreamRun != nil {
 		return m.runConfiguredDream(ctx, opts)
 	}
+	if m.noProviderDreams {
+		return DreamReport{}, errors.New("dream runner is not configured")
+	}
 	report, err := m.dream.Run(ctx, dream.Options{Date: opts.Date})
 	if err != nil {
 		return DreamReport{}, err

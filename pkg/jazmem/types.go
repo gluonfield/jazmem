@@ -2,19 +2,19 @@ package jazmem
 
 import (
 	"context"
-	"errors"
 	"time"
 )
 
 type Config struct {
-	Root             string
-	DBPath           string
-	ProviderEndpoint string
-	APIKey           string
-	Model            string
-	ReasoningEffort  string
-	Now              func() time.Time
-	DreamRunner      DreamRunner
+	Root                  string
+	DBPath                string
+	ProviderEndpoint      string
+	APIKey                string
+	Model                 string
+	ReasoningEffort       string
+	Now                   func() time.Time
+	DreamRunner           DreamRunner
+	DisableProviderDreams bool
 }
 
 type PageRef struct {
@@ -120,8 +120,6 @@ type Report struct {
 type DreamOptions struct {
 	Date time.Time `json:"date,omitzero"`
 }
-
-var ErrDreamRunnerUnavailable = errors.New("dream runner unavailable")
 
 // DreamRunner lets an embedding host own dreaming with a richer runtime, such
 // as a coding agent that edits markdown directly. When configured, it is

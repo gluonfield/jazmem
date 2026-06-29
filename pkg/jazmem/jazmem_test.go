@@ -146,15 +146,16 @@ func TestDreamUsesConfiguredRunnerAndReindexes(t *testing.T) {
 	}
 }
 
-func TestConfiguredDreamRunnerUnavailableDoesNotFallbackToProvider(t *testing.T) {
+func TestConfiguredDreamRunnerErrorDoesNotFallbackToProvider(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	runnerErr := errors.New("runner unavailable")
 	mem, err := Open(Config{
 		Root:   root,
 		DBPath: dbPath,
 		DreamRunner: fakeDreamRunner{
 			run: func(context.Context, DreamRequest) (DreamReport, error) {
-				return DreamReport{}, ErrDreamRunnerUnavailable
+				return DreamReport{}, runnerErr
 			},
 		},
 	})
@@ -164,11 +165,31 @@ func TestConfiguredDreamRunnerUnavailableDoesNotFallbackToProvider(t *testing.T)
 	defer func() { _ = mem.Close() }()
 
 	_, err = mem.Dream(context.Background(), DreamOptions{})
-	if !errors.Is(err, ErrDreamRunnerUnavailable) {
+	if !errors.Is(err, runnerErr) {
 		t.Fatalf("expected configured runner error, got %v", err)
 	}
 	if strings.Contains(err.Error(), "OPENROUTER") {
 		t.Fatalf("configured runner fell through to provider-backed fallback: %v", err)
+	}
+}
+
+func TestProviderDreamsCanBeDisabled(t *testing.T) {
+	mem, err := Open(Config{
+		Root:                  t.TempDir(),
+		DBPath:                filepath.Join(t.TempDir(), "index.sqlite"),
+		DisableProviderDreams: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	_, err = mem.Dream(context.Background(), DreamOptions{})
+	if err == nil || !strings.Contains(err.Error(), "dream runner is not configured") {
+		t.Fatalf("expected missing dream runner error, got %v", err)
+	}
+	if strings.Contains(err.Error(), "OPENROUTER") {
+		t.Fatalf("provider-backed dream path was still reachable: %v", err)
 	}
 }
 
