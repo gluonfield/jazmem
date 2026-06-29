@@ -80,10 +80,7 @@ func (m *Memory) Dream(ctx context.Context, opts DreamOptions) (DreamReport, err
 
 func (m *Memory) runDream(ctx context.Context, opts DreamOptions) (DreamReport, error) {
 	if m.dreamRun != nil {
-		report, err := m.runConfiguredDream(ctx, opts)
-		if !errors.Is(err, ErrDreamRunnerUnavailable) {
-			return report, err
-		}
+		return m.runConfiguredDream(ctx, opts)
 	}
 	report, err := m.dream.Run(ctx, dream.Options{Date: opts.Date})
 	if err != nil {
@@ -116,9 +113,6 @@ func (m *Memory) runConfiguredDream(ctx context.Context, opts DreamOptions) (Dre
 		DBPath: m.dbPath,
 		Date:   date.Local(),
 	})
-	if errors.Is(err, ErrDreamRunnerUnavailable) {
-		return report, err
-	}
 	horizonErr := m.validateHorizonFiles()
 	_, reindexErr := m.Reindex(ctx, ReindexOptions{})
 	if err != nil {

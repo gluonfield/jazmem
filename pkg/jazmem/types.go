@@ -123,9 +123,10 @@ type DreamOptions struct {
 
 var ErrDreamRunnerUnavailable = errors.New("dream runner unavailable")
 
-// DreamRunner lets an embedding host replace jazmem's provider-backed dream
-// prompt with a richer runtime, such as a coding agent that edits markdown
-// directly. jazmem still owns indexing before and after the run.
+// DreamRunner lets an embedding host own dreaming with a richer runtime, such
+// as a coding agent that edits markdown directly. When configured, it is
+// authoritative; provider-backed dreaming is only the standalone default.
+// jazmem still owns indexing before and after the run.
 type DreamRunner interface {
 	RunDream(context.Context, DreamRequest) (DreamReport, error)
 }

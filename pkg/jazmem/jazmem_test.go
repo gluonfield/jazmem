@@ -146,6 +146,32 @@ func TestDreamUsesConfiguredRunnerAndReindexes(t *testing.T) {
 	}
 }
 
+func TestConfiguredDreamRunnerUnavailableDoesNotFallbackToProvider(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
+	mem, err := Open(Config{
+		Root:   root,
+		DBPath: dbPath,
+		DreamRunner: fakeDreamRunner{
+			run: func(context.Context, DreamRequest) (DreamReport, error) {
+				return DreamReport{}, ErrDreamRunnerUnavailable
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	_, err = mem.Dream(context.Background(), DreamOptions{})
+	if !errors.Is(err, ErrDreamRunnerUnavailable) {
+		t.Fatalf("expected configured runner error, got %v", err)
+	}
+	if strings.Contains(err.Error(), "OPENROUTER") {
+		t.Fatalf("configured runner fell through to provider-backed fallback: %v", err)
+	}
+}
+
 func TestDreamReindexesAfterConfiguredRunnerFailure(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "index.sqlite")
