@@ -9,18 +9,21 @@ import (
 )
 
 type Querier interface {
-	ClearAliases(ctx context.Context) error
-	ClearChunks(ctx context.Context) error
-	ClearChunksFTS(ctx context.Context) error
-	ClearLinks(ctx context.Context) error
-	ClearPages(ctx context.Context) error
-	ClearUnresolvedLinks(ctx context.Context) error
+	DeletePageAliases(ctx context.Context, jsonEach interface{}) error
+	DeletePageChunks(ctx context.Context, jsonEach interface{}) error
+	DeletePageChunksFTS(ctx context.Context, jsonEach interface{}) error
+	DeletePageIndex(ctx context.Context, jsonEach interface{}) error
+	DeletePageLinks(ctx context.Context, jsonEach interface{}) error
+	DeletePageUnresolved(ctx context.Context, jsonEach interface{}) error
+	IndexCatalog(ctx context.Context) (string, error)
+	IndexCounts(ctx context.Context) (IndexCountsRow, error)
 	InsertAlias(ctx context.Context, arg InsertAliasParams) error
 	InsertChunk(ctx context.Context, arg InsertChunkParams) error
 	InsertChunkFTS(ctx context.Context, arg InsertChunkFTSParams) error
 	InsertLink(ctx context.Context, arg InsertLinkParams) error
 	InsertPage(ctx context.Context, arg InsertPageParams) error
 	InsertUnresolvedLink(ctx context.Context, arg InsertUnresolvedLinkParams) error
+	ListIndexedPages(ctx context.Context) ([]ListIndexedPagesRow, error)
 	RecordIndexState(ctx context.Context, arg RecordIndexStateParams) error
 }
 

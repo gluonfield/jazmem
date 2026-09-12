@@ -77,3 +77,36 @@ func TestFailedCalendarTaskRetriesAfterBackoff(t *testing.T) {
 		t.Fatalf("successful run consumes the day: err=%v runs=%d", err, runs)
 	}
 }
+
+func TestLongRunWaitsItsIntervalAfterCompletion(t *testing.T) {
+	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	recorder := newFakeRecorder()
+	runs := 0
+	s := Scheduler{
+		Recorder: recorder,
+		Now: func() time.Time {
+			return now
+		},
+		Tasks: []Task{{
+			Name:     "index",
+			Interval: time.Minute,
+			Run: func(context.Context) error {
+				runs++
+				now = now.Add(70 * time.Second)
+				return nil
+			},
+		}},
+	}
+	for range 2 {
+		if err := s.runDue(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if runs != 1 {
+		t.Fatalf("immediate runs=%d", runs)
+	}
+	now = now.Add(time.Minute)
+	if err := s.runDue(t.Context()); err != nil || runs != 2 {
+		t.Fatalf("runs=%d err=%v", runs, err)
+	}
+}

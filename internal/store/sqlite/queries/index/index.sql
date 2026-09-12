@@ -1,20 +1,35 @@
--- name: ClearChunksFTS :exec
-DELETE FROM chunks_fts;
+-- name: ListIndexedPages :many
+SELECT slug, path, body_hash, frontmatter_json, modified_at_ms, extractor_hash FROM pages;
 
--- name: ClearChunks :exec
-DELETE FROM chunks;
+-- name: IndexCatalog :one
+SELECT value FROM index_state WHERE key = 'catalog';
 
--- name: ClearUnresolvedLinks :exec
-DELETE FROM unresolved_links;
+-- name: DeletePageIndex :exec
+DELETE FROM pages WHERE slug IN (SELECT value FROM json_each(?));
 
--- name: ClearLinks :exec
-DELETE FROM links;
+-- name: DeletePageAliases :exec
+DELETE FROM aliases WHERE slug IN (SELECT value FROM json_each(?));
 
--- name: ClearAliases :exec
-DELETE FROM aliases;
+-- name: DeletePageLinks :exec
+DELETE FROM links WHERE from_slug IN (SELECT value FROM json_each(?));
 
--- name: ClearPages :exec
-DELETE FROM pages;
+-- name: DeletePageUnresolved :exec
+DELETE FROM unresolved_links WHERE from_slug IN (SELECT value FROM json_each(?));
+
+-- name: DeletePageChunks :exec
+DELETE FROM chunks WHERE slug IN (SELECT value FROM json_each(?));
+
+-- name: DeletePageChunksFTS :exec
+DELETE FROM chunks_fts WHERE slug IN (SELECT value FROM json_each(?));
+
+-- name: IndexCounts :one
+SELECT
+    (SELECT COUNT(*) FROM pages) AS pages,
+    (SELECT COUNT(*) FROM chunks) AS chunks,
+    (SELECT COUNT(*) FROM links WHERE link_source = 'explicit') AS explicit_links,
+    (SELECT COUNT(*) FROM links WHERE link_source = 'relationship') AS typed_links,
+    (SELECT COUNT(*) FROM links WHERE link_source = 'mention') AS mention_links,
+    (SELECT COUNT(*) FROM unresolved_links) AS unresolved_links;
 
 -- name: InsertPage :exec
 INSERT INTO pages(

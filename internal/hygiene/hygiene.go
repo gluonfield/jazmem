@@ -3,19 +3,18 @@ package hygiene
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/gluonfield/jazmem/internal/indexer"
 	"github.com/gluonfield/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/mention"
 )
 
 type Service struct {
-	FS      *memfs.FileSystem
-	Now     func() time.Time
-	Reindex func(context.Context) error
+	FS  *memfs.FileSystem
+	Now func() time.Time
 }
 
 type Report struct {
@@ -49,16 +48,14 @@ type relationship struct {
 }
 
 func (s *Service) Run(ctx context.Context) (Report, error) {
-	if s.Reindex != nil {
-		if err := s.Reindex(ctx); err != nil {
-			return Report{}, err
-		}
-	}
-	pages, err := s.FS.ListPages()
+	pages, err := s.FS.ListPages(ctx)
 	if err != nil {
 		return Report{}, err
 	}
-	relationships := discoverRelationships(pages)
+	relationships, err := discoverRelationships(ctx, pages)
+	if err != nil {
+		return Report{}, err
+	}
 	if len(relationships) == 0 {
 		return Report{}, nil
 	}
@@ -75,11 +72,6 @@ func (s *Service) Run(ctx context.Context) (Report, error) {
 	reviewSlug, err := s.writeReview(proposals)
 	if err != nil {
 		return Report{}, err
-	}
-	if s.Reindex != nil {
-		if err := s.Reindex(ctx); err != nil {
-			return Report{}, err
-		}
 	}
 	return Report{
 		RelationshipsAdded: 0,
@@ -138,45 +130,58 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
-func discoverRelationships(pages []memfs.Page) []relationship {
+func discoverRelationships(ctx context.Context, pages []memfs.Page) ([]relationship, error) {
 	entities := entitiesFromPages(pages)
+	var aliases []string
+	var owners []int
+	bySlug := map[string]int{}
+	for index, entity := range entities {
+		bySlug[entity.Page.Slug] = index
+		for _, alias := range entity.Aliases {
+			aliases = append(aliases, alias)
+			owners = append(owners, index)
+		}
+	}
+	matcher := mention.New(aliases)
 	var out []relationship
 	seen := map[string]bool{}
 	for _, source := range pages {
-		body := indexer.StripCode(source.Body)
-		label := relationshipLabel(body)
-		if label == "" {
-			continue
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
-		sourceEntity, sourceIsEntity := entityBySlug(entities, source.Slug)
-		if sourceIsEntity {
-			for _, target := range entities {
-				if target.Page.Slug == source.Slug || !containsAnyAlias(body, target.Aliases) {
-					continue
-				}
-				key := source.Slug + "\x00" + target.Page.Slug + "\x00" + label
-				if seen[key] {
-					continue
-				}
-				seen[key] = true
-				out = append(out, relationship{From: sourceEntity.Page, To: target.Page, Label: label, Source: source})
+		for line := range strings.SplitSeq(indexer.StripCode(source.Body), "\n") {
+			label := relationshipLabel(line)
+			if label == "" {
+				continue
 			}
-			continue
-		}
-		mentioned := mentionedEntities(body, entities)
-		for i := range len(mentioned) {
-			for j := i + 1; j < len(mentioned); j++ {
-				left, right := mentioned[i], mentioned[j]
-				key := left.Page.Slug + "\x00" + right.Page.Slug + "\x00" + label
-				if seen[key] {
-					continue
-				}
+			matches, err := matcher.Find(ctx, line)
+			if err != nil {
+				return nil, err
+			}
+			mentioned := map[int]bool{}
+			if owner, ok := bySlug[source.Slug]; ok {
+				mentioned[owner] = true
+			}
+			for _, match := range matches {
+				mentioned[owners[match.Alias]] = true
+			}
+			if len(mentioned) != 2 {
+				continue
+			}
+			var pair []int
+			for owner := range mentioned {
+				pair = append(pair, owner)
+			}
+			sort.Ints(pair)
+			left, right := entities[pair[0]].Page, entities[pair[1]].Page
+			key := left.Slug + "\x00" + right.Slug + "\x00" + label
+			if !seen[key] {
 				seen[key] = true
-				out = append(out, relationship{From: left.Page, To: right.Page, Label: label, Source: source})
+				out = append(out, relationship{From: left, To: right, Label: label, Source: source})
 			}
 		}
 	}
-	return out
+	return out, nil
 }
 
 func entitiesFromPages(pages []memfs.Page) []entity {
@@ -188,25 +193,6 @@ func entitiesFromPages(pages []memfs.Page) []entity {
 		out = append(out, entity{Page: page, Aliases: relationshipAliases(page)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Page.Slug < out[j].Page.Slug })
-	return out
-}
-
-func entityBySlug(entities []entity, slug string) (entity, bool) {
-	for _, entity := range entities {
-		if entity.Page.Slug == slug {
-			return entity, true
-		}
-	}
-	return entity{}, false
-}
-
-func mentionedEntities(body string, entities []entity) []entity {
-	var out []entity
-	for _, entity := range entities {
-		if containsAnyAlias(body, entity.Aliases) {
-			out = append(out, entity)
-		}
-	}
 	return out
 }
 
@@ -251,22 +237,6 @@ func relationshipLabel(body string) string {
 	default:
 		return ""
 	}
-}
-
-func containsAnyAlias(body string, aliases []string) bool {
-	for _, alias := range aliases {
-		if alias == "" {
-			continue
-		}
-		if aliasRegexp(alias).MatchString(body) {
-			return true
-		}
-	}
-	return false
-}
-
-func aliasRegexp(alias string) *regexp.Regexp {
-	return regexp.MustCompile(`(?i)(^|[^[:alnum:]_])` + regexp.QuoteMeta(alias) + `([^[:alnum:]_]|$)`)
 }
 
 func hasRelationship(raw, targetSlug string) bool {

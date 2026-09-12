@@ -55,12 +55,12 @@ func TestMigrateRejectsPartialLegacySchema(t *testing.T) {
 	}
 }
 
-func TestRebuildSearchEntityAndState(t *testing.T) {
+func TestUpdateIndexSearchEntityAndState(t *testing.T) {
 	store := openTestStore(t)
 	defer func() { _ = store.Close() }()
 
 	now := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
-	err := store.Rebuild(t.Context(), IndexData{
+	err := store.UpdateIndex(t.Context(), IndexData{
 		Pages: []PageRecord{
 			{Slug: "people/augustinas", Path: "/memory/people/augustinas.md", Type: "people", Title: "Augustinas Malinauskas", AliasesJSON: `["Augustinas"]`, Frontmatter: map[string]any{"title": "Augustinas Malinauskas"}, BodyHash: "a", ModifiedAt: now, IndexedAt: now, ExtractorHash: "v1"},
 			{Slug: "concepts/go-stack", Path: "/memory/concepts/go-stack.md", Type: "concepts", Title: "Go Stack", AliasesJSON: `[]`, Frontmatter: map[string]any{"title": "Go Stack"}, BodyHash: "b", ModifiedAt: now, IndexedAt: now, ExtractorHash: "v1"},
@@ -75,7 +75,7 @@ func TestRebuildSearchEntityAndState(t *testing.T) {
 			{Slug: "people/augustinas", Index: 0, Title: "Augustinas Malinauskas", Body: "Augustinas builds backend systems in Go.", BodyHash: "c", ModifiedAt: now},
 			{Slug: "concepts/go-stack", Index: 0, Title: "Go Stack", Body: "Go, Postgres, sqlc, and Temporal are the backend defaults.", BodyHash: "d", ModifiedAt: now},
 		},
-	})
+	}, nil, "test")
 	if err != nil {
 		t.Fatal(err)
 	}

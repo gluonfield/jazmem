@@ -103,31 +103,29 @@ func (m *Memory) taskSpecs() []taskSpec {
 }
 
 func (m *Memory) RunIndexTask(ctx context.Context) (Report, error) {
-	runAt := m.timeNow()
 	var report Report
 	err := m.runMaintenance(ctx, func(ctx context.Context) error {
 		var err error
 		report, err = m.Reindex(ctx, ReindexOptions{})
-		recordErr := m.recordTaskResult(ctx, TaskIndexChangedPages, runAt, err)
+		recordErr := m.recordTaskResult(ctx, TaskIndexChangedPages, m.timeNow(), err)
 		return errors.Join(err, recordErr)
 	})
 	return report, err
 }
 
 func (m *Memory) RunDreamTask(ctx context.Context, opts DreamOptions) (DreamTaskReport, error) {
-	runAt := m.timeNow()
 	var report DreamTaskReport
 	err := m.runMaintenance(ctx, func(ctx context.Context) error {
 		var indexErr error
 		report.Index, indexErr = m.Reindex(ctx, ReindexOptions{})
-		indexRecordErr := m.recordTaskResult(ctx, TaskIndexChangedPages, runAt, indexErr)
+		indexRecordErr := m.recordTaskResult(ctx, TaskIndexChangedPages, m.timeNow(), indexErr)
 		if indexErr != nil {
-			dreamRecordErr := m.recordTaskResult(ctx, TaskDream, runAt, indexErr)
+			dreamRecordErr := m.recordTaskResult(ctx, TaskDream, m.timeNow(), indexErr)
 			return errors.Join(indexErr, indexRecordErr, dreamRecordErr)
 		}
 		var dreamErr error
 		report.Dream, dreamErr = m.Dream(ctx, opts)
-		dreamRecordErr := m.recordTaskResult(ctx, TaskDream, runAt, dreamErr)
+		dreamRecordErr := m.recordTaskResult(ctx, TaskDream, m.timeNow(), dreamErr)
 		return errors.Join(indexRecordErr, dreamErr, dreamRecordErr)
 	})
 	return report, err
@@ -136,6 +134,9 @@ func (m *Memory) RunDreamTask(ctx context.Context, opts DreamOptions) (DreamTask
 func (m *Memory) runMaintenance(ctx context.Context, run func(context.Context) error) error {
 	m.maintenanceMu.Lock()
 	defer m.maintenanceMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return run(ctx)
 }
 
@@ -146,7 +147,7 @@ func (m *Memory) recordTaskResult(ctx context.Context, task string, runAt time.T
 		status = "error"
 		errText = runErr.Error()
 	}
-	return m.store.RecordTask(ctx, task, status, runAt, errText)
+	return m.store.RecordTask(ctx, task, status, m.timeNow(), errText)
 }
 
 func (m *Memory) StartScheduler(ctx context.Context) error {

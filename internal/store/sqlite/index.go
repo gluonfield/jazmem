@@ -4,29 +4,36 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"time"
 
 	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/indexdb"
 )
 
-func (s *Store) Rebuild(ctx context.Context, data IndexData) error {
+func (s *Store) UpdateIndex(ctx context.Context, data IndexData, removed []string, catalog string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer rollback(tx)
 	q := indexdb.New(tx)
-	for _, clear := range []func(context.Context) error{
-		q.ClearChunksFTS,
-		q.ClearChunks,
-		q.ClearUnresolvedLinks,
-		q.ClearLinks,
-		q.ClearAliases,
-		q.ClearPages,
-	} {
-		if err := clear(ctx); err != nil {
+	if len(removed) > 0 {
+		slugs, err := json.Marshal(removed)
+		if err != nil {
 			return err
+		}
+		for _, remove := range []func(context.Context, any) error{
+			q.DeletePageChunksFTS,
+			q.DeletePageChunks,
+			q.DeletePageUnresolved,
+			q.DeletePageLinks,
+			q.DeletePageAliases,
+			q.DeletePageIndex,
+		} {
+			if err := remove(ctx, string(slugs)); err != nil {
+				return err
+			}
 		}
 	}
 	if err := insertPages(ctx, q, data.Pages); err != nil {
@@ -48,6 +55,13 @@ func (s *Store) Rebuild(ctx context.Context, data IndexData) error {
 	if err := q.RecordIndexState(ctx, indexdb.RecordIndexStateParams{
 		Key:         "last_rebuild",
 		Value:       now.Format(time.RFC3339),
+		UpdatedAtMs: millis(now),
+	}); err != nil {
+		return err
+	}
+	if err := q.RecordIndexState(ctx, indexdb.RecordIndexStateParams{
+		Key:         "catalog",
+		Value:       catalog,
 		UpdatedAtMs: millis(now),
 	}); err != nil {
 		return err
@@ -152,4 +166,56 @@ func insertChunks(ctx context.Context, q indexdb.Querier, chunks []ChunkRecord) 
 
 func rollback(tx *sql.Tx) {
 	_ = tx.Rollback()
+}
+
+type IndexedPage struct {
+	Path            string
+	BodyHash        string
+	FrontmatterJSON string
+	ModifiedAt      time.Time
+	ExtractorHash   string
+}
+
+func (s *Store) IndexSnapshot(ctx context.Context) (map[string]IndexedPage, string, error) {
+	q := indexdb.New(s.db)
+	rows, err := q.ListIndexedPages(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	pages := make(map[string]IndexedPage, len(rows))
+	for _, row := range rows {
+		pages[row.Slug] = IndexedPage{
+			Path:            row.Path,
+			BodyHash:        row.BodyHash,
+			FrontmatterJSON: row.FrontmatterJson,
+			ModifiedAt:      time.UnixMilli(row.ModifiedAtMs),
+			ExtractorHash:   row.ExtractorHash,
+		}
+	}
+	catalog, err := q.IndexCatalog(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	return pages, catalog, err
+}
+
+type IndexReport struct {
+	PageCount       int `json:"page_count"`
+	ChunkCount      int `json:"chunk_count"`
+	ExplicitLinks   int `json:"explicit_links"`
+	TypedLinks      int `json:"typed_links"`
+	MentionLinks    int `json:"mention_links"`
+	UnresolvedLinks int `json:"unresolved_links"`
+}
+
+func (s *Store) IndexCounts(ctx context.Context) (IndexReport, error) {
+	counts, err := indexdb.New(s.db).IndexCounts(ctx)
+	return IndexReport{
+		PageCount:       int(counts.Pages),
+		ChunkCount:      int(counts.Chunks),
+		ExplicitLinks:   int(counts.ExplicitLinks),
+		TypedLinks:      int(counts.TypedLinks),
+		MentionLinks:    int(counts.MentionLinks),
+		UnresolvedLinks: int(counts.UnresolvedLinks),
+	}, err
 }

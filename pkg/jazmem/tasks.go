@@ -42,7 +42,7 @@ func (m *Memory) ListTasks(ctx context.Context, filter TaskFilter) ([]Task, erro
 		return nil, ctx.Err()
 	default:
 	}
-	pages, err := m.fs.ListPages()
+	pages, err := m.fs.ListPages(ctx)
 	if err != nil {
 		return nil, err
 	}

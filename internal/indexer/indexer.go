@@ -10,9 +10,11 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gluonfield/jazmem/internal/memfs"
+	"github.com/gluonfield/jazmem/internal/mention"
 	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
 )
 
@@ -21,21 +23,15 @@ import (
 // graph as body wikilinks without being duplicated into prose.
 var frontmatterLinkFields = []string{"project"}
 
-const extractorHash = "jazmem-indexer-v1"
+const extractorHash = "jazmem-indexer-v2"
 
 type Indexer struct {
+	mu    sync.Mutex
 	FS    *memfs.FileSystem
 	Store *sqlitestore.Store
 }
 
-type Report struct {
-	PageCount       int `json:"page_count"`
-	ChunkCount      int `json:"chunk_count"`
-	ExplicitLinks   int `json:"explicit_links"`
-	TypedLinks      int `json:"typed_links"`
-	MentionLinks    int `json:"mention_links"`
-	UnresolvedLinks int `json:"unresolved_links"`
-}
+type Report = sqlitestore.IndexReport
 
 type ExplicitLink struct {
 	Target          string
@@ -44,36 +40,23 @@ type ExplicitLink struct {
 	InRelationships bool
 }
 
-func (i *Indexer) Reindex(ctx context.Context) (Report, error) {
-	pages, err := i.FS.ListPages()
-	if err != nil {
-		return Report{}, err
-	}
-	data, report, err := buildIndex(pages)
-	if err != nil {
-		return Report{}, err
-	}
-	if err := i.Store.Rebuild(ctx, data); err != nil {
-		return Report{}, err
-	}
-	return report, nil
-}
-
-func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
+func buildIndex(ctx context.Context, pages, catalog []memfs.Page) (sqlitestore.IndexData, error) {
 	now := time.Now().UTC()
 	slugSet := map[string]bool{}
-	for _, page := range pages {
+	for _, page := range catalog {
 		slugSet[page.Slug] = true
 	}
-	resolver := newResolver(pages)
-	gazetteer := buildGazetteer(pages)
+	resolver := newResolver(catalog)
+	gazetteer := buildGazetteer(catalog)
 
 	var data sqlitestore.IndexData
-	var report Report
 	for _, page := range pages {
+		if err := ctx.Err(); err != nil {
+			return sqlitestore.IndexData{}, err
+		}
 		aliasesJSON, err := json.Marshal(page.Aliases)
 		if err != nil {
-			return sqlitestore.IndexData{}, Report{}, err
+			return sqlitestore.IndexData{}, err
 		}
 		data.Pages = append(data.Pages, sqlitestore.PageRecord{
 			Slug:          page.Slug,
@@ -106,7 +89,6 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 					Reason:   reason,
 					Context:  link.Context,
 				})
-				report.UnresolvedLinks++
 				continue
 			}
 			if target == page.Slug {
@@ -134,7 +116,6 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 					Reason:   reason,
 					Context:  "frontmatter",
 				})
-				report.UnresolvedLinks++
 				continue
 			}
 			if resolved == page.Slug {
@@ -150,7 +131,11 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 			})
 		}
 
-		for _, mention := range detectMentions(page, clean, gazetteer) {
+		mentions, err := detectMentions(ctx, page, clean, gazetteer)
+		if err != nil {
+			return sqlitestore.IndexData{}, err
+		}
+		for _, mention := range mentions {
 			if !slugSet[mention.ToSlug] || mention.ToSlug == page.Slug {
 				continue
 			}
@@ -159,27 +144,15 @@ func buildIndex(pages []memfs.Page) (sqlitestore.IndexData, Report, error) {
 
 		chunks := SplitChunks(page)
 		data.Chunks = append(data.Chunks, chunks...)
-		report.ChunkCount += len(chunks)
 	}
 	data.Links = dedupeLinks(data.Links)
-	for _, link := range data.Links {
-		switch link.LinkSource {
-		case "explicit":
-			report.ExplicitLinks++
-		case "relationship":
-			report.TypedLinks++
-		case "mention":
-			report.MentionLinks++
-		}
-	}
 	sort.Slice(data.Aliases, func(a, b int) bool {
 		if data.Aliases[a].NormalizedAlias == data.Aliases[b].NormalizedAlias {
 			return data.Aliases[a].Slug < data.Aliases[b].Slug
 		}
 		return data.Aliases[a].NormalizedAlias < data.Aliases[b].NormalizedAlias
 	})
-	report.PageCount = len(pages)
-	return data, report, nil
+	return data, nil
 }
 
 // dedupeLinks keeps the first row per (from, to, type, source): reciprocal
@@ -378,65 +351,63 @@ func (r resolver) Resolve(target string) (string, string) {
 type gazetteerEntry struct {
 	Slug  string
 	Alias string
-	RE    *regexp.Regexp
 }
 
-func buildGazetteer(pages []memfs.Page) []gazetteerEntry {
+type gazetteer struct {
+	entries []gazetteerEntry
+	matcher *mention.Matcher
+}
+
+func buildGazetteer(pages []memfs.Page) gazetteer {
 	var entries []gazetteerEntry
-	seen := map[string]bool{}
 	for _, page := range pages {
+		switch strings.SplitN(page.Slug, "/", 2)[0] {
+		case "people", "companies", "projects", "concepts":
+		default:
+			continue
+		}
 		for _, alias := range aliasesForPage(page) {
-			alias = strings.TrimSpace(alias)
-			if !mentionAliasAllowed(alias) {
-				continue
+			if len(NormalizeAlias(alias)) >= 4 {
+				entries = append(entries, gazetteerEntry{Slug: page.Slug, Alias: alias})
 			}
-			key := page.Slug + "\x00" + strings.ToLower(alias)
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			entries = append(entries, gazetteerEntry{
-				Slug:  page.Slug,
-				Alias: alias,
-				RE:    mentionRegexp(alias),
-			})
 		}
 	}
-	sort.Slice(entries, func(i, j int) bool {
+	sort.SliceStable(entries, func(i, j int) bool {
 		if len(entries[i].Alias) == len(entries[j].Alias) {
 			return entries[i].Alias < entries[j].Alias
 		}
 		return len(entries[i].Alias) > len(entries[j].Alias)
 	})
-	return entries
+	aliases := make([]string, len(entries))
+	for index, entry := range entries {
+		aliases[index] = entry.Alias
+	}
+	return gazetteer{entries: entries, matcher: mention.New(aliases)}
 }
 
-func detectMentions(page memfs.Page, body string, entries []gazetteerEntry) []sqlitestore.LinkRecord {
+func detectMentions(ctx context.Context, page memfs.Page, body string, names gazetteer) ([]sqlitestore.LinkRecord, error) {
+	matches, err := names.matcher.Find(ctx, body)
+	if err != nil {
+		return nil, err
+	}
 	var out []sqlitestore.LinkRecord
 	seen := map[string]bool{}
-	for _, entry := range entries {
-		if entry.Slug == page.Slug {
+	for _, match := range matches {
+		entry := names.entries[match.Alias]
+		if entry.Slug == page.Slug || seen[entry.Slug] {
 			continue
 		}
-		match := entry.RE.FindStringIndex(body)
-		if match == nil {
-			continue
-		}
-		key := entry.Slug + "\x00" + strings.ToLower(entry.Alias)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
+		seen[entry.Slug] = true
 		out = append(out, sqlitestore.LinkRecord{
 			FromSlug:   page.Slug,
 			ToSlug:     entry.Slug,
 			LinkType:   "mention",
 			LinkSource: "mention",
 			Display:    entry.Alias,
-			Context:    contextAround(body, match[0], match[1]),
+			Context:    contextAround(body, match.Start, match.End),
 		})
 	}
-	return out
+	return out, nil
 }
 
 type relationSpec struct {
@@ -574,22 +545,6 @@ func aliasesForPage(page memfs.Page) []string {
 func slugTail(slug string) string {
 	parts := strings.Split(slug, "/")
 	return strings.ReplaceAll(parts[len(parts)-1], "-", " ")
-}
-
-func mentionAliasAllowed(alias string) bool {
-	normalized := NormalizeAlias(alias)
-	if len(normalized) < 4 {
-		return false
-	}
-	if strings.Count(normalized, " ") == 0 && len(normalized) < 4 {
-		return false
-	}
-	return true
-}
-
-func mentionRegexp(alias string) *regexp.Regexp {
-	escaped := regexp.QuoteMeta(alias)
-	return regexp.MustCompile(`(?i)(^|[^[:alnum:]_])` + escaped + `([^[:alnum:]_]|$)`)
 }
 
 func contextAround(body string, start, end int) string {

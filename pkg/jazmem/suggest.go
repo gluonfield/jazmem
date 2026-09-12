@@ -1,6 +1,7 @@
 package jazmem
 
 import (
+	"context"
 	"os"
 	"regexp"
 	"sort"
@@ -23,16 +24,16 @@ func (e *NotFoundError) Error() string {
 	return "not found: " + e.Slug
 }
 
-func (m *Memory) notFoundError(slug string, err error) error {
+func (m *Memory) notFoundError(ctx context.Context, slug string, err error) error {
 	if !os.IsNotExist(err) {
 		return err
 	}
-	return &NotFoundError{Slug: memfs.CleanSlug(slug), Suggestions: m.suggestSlugs(slug, 8)}
+	return &NotFoundError{Slug: memfs.CleanSlug(slug), Suggestions: m.suggestSlugs(ctx, slug, 8)}
 }
 
-func (m *Memory) suggestSlugs(input string, limit int) []SlugSuggestion {
+func (m *Memory) suggestSlugs(ctx context.Context, input string, limit int) []SlugSuggestion {
 	input = memfs.CleanSlug(input)
-	pages, err := m.fs.ListPages()
+	pages, err := m.fs.ListPages(ctx)
 	if err != nil {
 		return nil
 	}

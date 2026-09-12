@@ -72,7 +72,7 @@ func (s *Service) Run(ctx context.Context, opts Options) (Report, error) {
 		date = s.now()
 	}
 	date = date.Local()
-	pages, err := s.FS.ListPages()
+	pages, err := s.FS.ListPages(ctx)
 	if err != nil {
 		return Report{}, err
 	}

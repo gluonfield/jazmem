@@ -9,58 +9,102 @@ import (
 	"context"
 )
 
-const clearAliases = `-- name: ClearAliases :exec
-DELETE FROM aliases
+const deletePageAliases = `-- name: DeletePageAliases :exec
+DELETE FROM aliases WHERE slug IN (SELECT value FROM json_each(?))
 `
 
-func (q *Queries) ClearAliases(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearAliases)
+func (q *Queries) DeletePageAliases(ctx context.Context, jsonEach interface{}) error {
+	_, err := q.db.ExecContext(ctx, deletePageAliases, jsonEach)
 	return err
 }
 
-const clearChunks = `-- name: ClearChunks :exec
-DELETE FROM chunks
+const deletePageChunks = `-- name: DeletePageChunks :exec
+DELETE FROM chunks WHERE slug IN (SELECT value FROM json_each(?))
 `
 
-func (q *Queries) ClearChunks(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearChunks)
+func (q *Queries) DeletePageChunks(ctx context.Context, jsonEach interface{}) error {
+	_, err := q.db.ExecContext(ctx, deletePageChunks, jsonEach)
 	return err
 }
 
-const clearChunksFTS = `-- name: ClearChunksFTS :exec
-DELETE FROM chunks_fts
+const deletePageChunksFTS = `-- name: DeletePageChunksFTS :exec
+DELETE FROM chunks_fts WHERE slug IN (SELECT value FROM json_each(?))
 `
 
-func (q *Queries) ClearChunksFTS(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearChunksFTS)
+func (q *Queries) DeletePageChunksFTS(ctx context.Context, jsonEach interface{}) error {
+	_, err := q.db.ExecContext(ctx, deletePageChunksFTS, jsonEach)
 	return err
 }
 
-const clearLinks = `-- name: ClearLinks :exec
-DELETE FROM links
+const deletePageIndex = `-- name: DeletePageIndex :exec
+DELETE FROM pages WHERE slug IN (SELECT value FROM json_each(?))
 `
 
-func (q *Queries) ClearLinks(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearLinks)
+func (q *Queries) DeletePageIndex(ctx context.Context, jsonEach interface{}) error {
+	_, err := q.db.ExecContext(ctx, deletePageIndex, jsonEach)
 	return err
 }
 
-const clearPages = `-- name: ClearPages :exec
-DELETE FROM pages
+const deletePageLinks = `-- name: DeletePageLinks :exec
+DELETE FROM links WHERE from_slug IN (SELECT value FROM json_each(?))
 `
 
-func (q *Queries) ClearPages(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearPages)
+func (q *Queries) DeletePageLinks(ctx context.Context, jsonEach interface{}) error {
+	_, err := q.db.ExecContext(ctx, deletePageLinks, jsonEach)
 	return err
 }
 
-const clearUnresolvedLinks = `-- name: ClearUnresolvedLinks :exec
-DELETE FROM unresolved_links
+const deletePageUnresolved = `-- name: DeletePageUnresolved :exec
+DELETE FROM unresolved_links WHERE from_slug IN (SELECT value FROM json_each(?))
 `
 
-func (q *Queries) ClearUnresolvedLinks(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearUnresolvedLinks)
+func (q *Queries) DeletePageUnresolved(ctx context.Context, jsonEach interface{}) error {
+	_, err := q.db.ExecContext(ctx, deletePageUnresolved, jsonEach)
 	return err
+}
+
+const indexCatalog = `-- name: IndexCatalog :one
+SELECT value FROM index_state WHERE key = 'catalog'
+`
+
+func (q *Queries) IndexCatalog(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, indexCatalog)
+	var value string
+	err := row.Scan(&value)
+	return value, err
+}
+
+const indexCounts = `-- name: IndexCounts :one
+SELECT
+    (SELECT COUNT(*) FROM pages) AS pages,
+    (SELECT COUNT(*) FROM chunks) AS chunks,
+    (SELECT COUNT(*) FROM links WHERE link_source = 'explicit') AS explicit_links,
+    (SELECT COUNT(*) FROM links WHERE link_source = 'relationship') AS typed_links,
+    (SELECT COUNT(*) FROM links WHERE link_source = 'mention') AS mention_links,
+    (SELECT COUNT(*) FROM unresolved_links) AS unresolved_links
+`
+
+type IndexCountsRow struct {
+	Pages           int64 `json:"pages"`
+	Chunks          int64 `json:"chunks"`
+	ExplicitLinks   int64 `json:"explicit_links"`
+	TypedLinks      int64 `json:"typed_links"`
+	MentionLinks    int64 `json:"mention_links"`
+	UnresolvedLinks int64 `json:"unresolved_links"`
+}
+
+func (q *Queries) IndexCounts(ctx context.Context) (IndexCountsRow, error) {
+	row := q.db.QueryRowContext(ctx, indexCounts)
+	var i IndexCountsRow
+	err := row.Scan(
+		&i.Pages,
+		&i.Chunks,
+		&i.ExplicitLinks,
+		&i.TypedLinks,
+		&i.MentionLinks,
+		&i.UnresolvedLinks,
+	)
+	return i, err
 }
 
 const insertAlias = `-- name: InsertAlias :exec
@@ -219,6 +263,49 @@ func (q *Queries) InsertUnresolvedLink(ctx context.Context, arg InsertUnresolved
 		arg.Context,
 	)
 	return err
+}
+
+const listIndexedPages = `-- name: ListIndexedPages :many
+SELECT slug, path, body_hash, frontmatter_json, modified_at_ms, extractor_hash FROM pages
+`
+
+type ListIndexedPagesRow struct {
+	Slug            string `json:"slug"`
+	Path            string `json:"path"`
+	BodyHash        string `json:"body_hash"`
+	FrontmatterJson string `json:"frontmatter_json"`
+	ModifiedAtMs    int64  `json:"modified_at_ms"`
+	ExtractorHash   string `json:"extractor_hash"`
+}
+
+func (q *Queries) ListIndexedPages(ctx context.Context) ([]ListIndexedPagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIndexedPages)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListIndexedPagesRow{}
+	for rows.Next() {
+		var i ListIndexedPagesRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.Path,
+			&i.BodyHash,
+			&i.FrontmatterJson,
+			&i.ModifiedAtMs,
+			&i.ExtractorHash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const recordIndexState = `-- name: RecordIndexState :exec

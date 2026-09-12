@@ -24,7 +24,7 @@ func (s *Service) ArchiveDoneTasks(ctx context.Context, date time.Time) (int, []
 		return 0, nil, ctx.Err()
 	default:
 	}
-	pages, err := s.FS.ListPages()
+	pages, err := s.FS.ListPages(ctx)
 	if err != nil {
 		return 0, nil, err
 	}

@@ -74,14 +74,8 @@ func open(cfg Config) (*Memory, error) {
 			return err
 		},
 	}
-	m.hygiene = &hygiene.Service{
-		FS:  fs,
-		Now: m.timeNow,
-		Reindex: func(ctx context.Context) error {
-			_, err := m.Reindex(ctx, ReindexOptions{})
-			return err
-		},
-	}
+	m.hygiene = &hygiene.Service{FS: fs, Now: m.timeNow}
+
 	return m, nil
 }
 

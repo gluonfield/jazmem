@@ -1,6 +1,7 @@
 package memfs
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -265,14 +266,17 @@ func LayoutDirs() []string {
 	}
 }
 
-func (fs *FileSystem) ListPages() ([]Page, error) {
+func (fs *FileSystem) ListPages(ctx context.Context) ([]Page, error) {
 	var pages []Page
 	if err := filepath.WalkDir(fs.Root, func(path string, d os.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			if strings.HasPrefix(d.Name(), ".") && path != fs.Root {
+			if path == filepath.Join(fs.Root, "dreams") || strings.HasPrefix(d.Name(), ".") && path != fs.Root {
 				return filepath.SkipDir
 			}
 			return nil

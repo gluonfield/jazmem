@@ -51,8 +51,11 @@ func (s *Scheduler) Run(ctx context.Context) error {
 }
 
 func (s *Scheduler) runDue(ctx context.Context) error {
-	now := s.now()
 	for _, task := range s.Tasks {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		now := s.now()
 		if task.Name == "" || task.Run == nil {
 			continue
 		}
@@ -71,7 +74,7 @@ func (s *Scheduler) runDue(ctx context.Context) error {
 			errText = err.Error()
 		}
 		if s.Recorder != nil {
-			if recordErr := s.Recorder.RecordTask(ctx, task.Name, status, now, errText); recordErr != nil {
+			if recordErr := s.Recorder.RecordTask(ctx, task.Name, status, s.now(), errText); recordErr != nil {
 				return recordErr
 			}
 		}

@@ -17,7 +17,7 @@ func (m *Memory) GetPage(ctx context.Context, slug string) (Page, error) {
 	}
 	page, err := m.fs.ReadPage(slug)
 	if err != nil {
-		return Page{}, m.notFoundError(slug, err)
+		return Page{}, m.notFoundError(ctx, slug, err)
 	}
 	out := publicPage(page)
 	// Graph neighborhood comes from the index; a stale or empty index should
