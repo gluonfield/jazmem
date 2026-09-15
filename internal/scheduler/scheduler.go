@@ -61,6 +61,11 @@ func (s *Scheduler) runDue(ctx context.Context) error {
 		if !taskDue(task, lastRun, now) {
 			continue
 		}
+		if s.Recorder != nil {
+			if err := s.Recorder.RecordTask(ctx, task.Name, "running", now, ""); err != nil {
+				return err
+			}
+		}
 		err = task.Run(ctx)
 		status := "ok"
 		errText := ""
@@ -69,12 +74,9 @@ func (s *Scheduler) runDue(ctx context.Context) error {
 			errText = err.Error()
 		}
 		if s.Recorder != nil {
-			if recordErr := s.Recorder.RecordTask(ctx, task.Name, status, s.now(), errText); recordErr != nil {
+			if recordErr := s.Recorder.RecordTask(context.WithoutCancel(ctx), task.Name, status, s.now(), errText); recordErr != nil {
 				return recordErr
 			}
-		}
-		if err != nil {
-			continue
 		}
 	}
 	return nil

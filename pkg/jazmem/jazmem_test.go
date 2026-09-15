@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gluonfield/jazmem/internal/scheduler"
 )
 
 func TestRawMarkdownReindexSearchAndDream(t *testing.T) {
@@ -341,6 +343,56 @@ func TestRunDreamTaskRecordsIndexAndDreamTasks(t *testing.T) {
 
 type fakeDreamRunner struct {
 	run func(context.Context, DreamRequest) (DreamReport, error)
+}
+
+func TestCancelledDreamRecordsItsDailyAttempt(t *testing.T) {
+	for _, scheduled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("scheduled=%v", scheduled), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			now := time.Date(2026, 9, 15, 3, 0, 0, 0, time.Local)
+			mem, err := Open(Config{
+				Root:   t.TempDir(),
+				DBPath: filepath.Join(t.TempDir(), "index.sqlite"),
+				Now:    func() time.Time { return now },
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = mem.Close() })
+			mem.SetDreamRunner(fakeDreamRunner{run: func(context.Context, DreamRequest) (DreamReport, error) {
+				started, status, err := mem.store.TaskState(t.Context(), TaskDream)
+				if err != nil || status != "running" || !started.Equal(now) {
+					t.Fatalf("daily slot was not recorded before work: at=%v status=%q err=%v", started, status, err)
+				}
+				cancel()
+				return DreamReport{}, ctx.Err()
+			}})
+			if scheduled {
+				for _, spec := range mem.taskSpecs() {
+					if spec.name != TaskDream {
+						continue
+					}
+					s := scheduler.Scheduler{Tasks: []scheduler.Task{{Name: spec.name, Due: spec.due, Run: spec.run}}, Recorder: mem.store, Now: mem.timeNow}
+					err = s.Run(ctx)
+				}
+			} else {
+				_, err = mem.RunDreamTask(ctx, DreamOptions{})
+			}
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancellation error = %v", err)
+			}
+			tasks, err := mem.SchedulerStatus(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, task := range tasks {
+				if task.Name == TaskDream && (task.Status != "error" || !task.LastRunAt.Equal(now) || !task.NextDue.Equal(now.AddDate(0, 0, 1))) {
+					t.Fatalf("cancelled run lost its daily slot: %#v", task)
+				}
+			}
+		})
+	}
 }
 
 func (f fakeDreamRunner) RunDream(ctx context.Context, req DreamRequest) (DreamReport, error) {
