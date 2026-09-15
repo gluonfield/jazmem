@@ -36,7 +36,7 @@ func (f *fakeRecorder) TaskState(_ context.Context, task string) (time.Time, str
 	return f.times[task], f.states[task][0], nil
 }
 
-func TestFailedCalendarTaskRetriesAfterBackoff(t *testing.T) {
+func TestFailedCalendarTaskKeepsDailyScheduleAcrossRestart(t *testing.T) {
 	recorder := newFakeRecorder()
 	now := time.Date(2026, 6, 10, 3, 46, 0, 0, time.UTC)
 	fail := true
@@ -66,10 +66,15 @@ func TestFailedCalendarTaskRetriesAfterBackoff(t *testing.T) {
 		t.Fatalf("within backoff should not retry: err=%v runs=%d", err, runs)
 	}
 
-	now = now.Add(25 * time.Minute) // 35m after failure
+	now = now.Add(12 * time.Hour)
+	s = &Scheduler{Tasks: []Task{task}, Recorder: recorder, Now: func() time.Time { return now }}
+	if err := s.runDue(context.Background()); err != nil || runs != 1 {
+		t.Fatalf("failed daily run retried the same day: err=%v runs=%d", err, runs)
+	}
+	now = now.AddDate(0, 0, 1)
 	fail = false
 	if err := s.runDue(context.Background()); err != nil || runs != 2 {
-		t.Fatalf("after backoff should retry: err=%v runs=%d", err, runs)
+		t.Fatalf("next day should run: err=%v runs=%d", err, runs)
 	}
 
 	now = now.Add(time.Hour)

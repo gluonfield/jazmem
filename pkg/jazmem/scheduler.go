@@ -90,7 +90,7 @@ func (m *Memory) taskSpecs() []taskSpec {
 				return err
 			})
 		}),
-		intervalSpec(TaskDream, 6*time.Hour, func(ctx context.Context) error {
+		dailySpec(TaskDream, 3, func(ctx context.Context) error {
 			return m.runMaintenance(ctx, func(ctx context.Context) error {
 				_, err := m.Dream(ctx, DreamOptions{})
 				return err
@@ -169,7 +169,7 @@ type TaskStatus struct {
 
 // SchedulerStatus reports every scheduled task with its last recorded run and
 // an estimate of the next due time. Tasks that never ran report a zero
-// LastRunAt and are due immediately; failed tasks report the retry time.
+// LastRunAt; failed tasks keep their normal schedule.
 func (m *Memory) SchedulerStatus(ctx context.Context) ([]TaskStatus, error) {
 	rows, err := m.store.ListTaskStates(ctx)
 	if err != nil {
@@ -185,11 +185,6 @@ func (m *Memory) SchedulerStatus(ctx context.Context) ([]TaskStatus, error) {
 	for _, spec := range specs {
 		row := byName[spec.name]
 		next := spec.next(row.LastRunAt, now)
-		if scheduler.TaskErrored(row.Status) {
-			if retry := row.LastRunAt.Add(scheduler.ErrorRetryBackoff); retry.Before(next) {
-				next = retry
-			}
-		}
 		out = append(out, TaskStatus{
 			Name:      spec.name,
 			LastRunAt: row.LastRunAt,

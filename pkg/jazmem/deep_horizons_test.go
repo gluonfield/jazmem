@@ -255,34 +255,43 @@ func TestHorizonReadWriteAndSchedulerStatus(t *testing.T) {
 	}
 }
 
-func TestDreamSchedulerRunsEverySixHours(t *testing.T) {
-	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
-	mem, err := Open(Config{Root: t.TempDir(), DBPath: filepath.Join(t.TempDir(), "index.sqlite"), Now: func() time.Time { return now }})
+func TestDreamSchedulerRunsOnceDailyAfterThree(t *testing.T) {
+	mem, err := Open(Config{Root: t.TempDir(), DBPath: filepath.Join(t.TempDir(), "index.sqlite")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = mem.Close() }()
-
+	t.Cleanup(func() { _ = mem.Close() })
 	var dream taskSpec
 	for _, spec := range mem.taskSpecs() {
-		if spec.name == "dream" {
+		if spec.name == TaskDream {
 			dream = spec
-			break
 		}
 	}
 	if dream.name == "" {
 		t.Fatal("dream task spec not found")
 	}
-
-	lastRun := now.Add(-6 * time.Hour)
-	if !dream.due(lastRun, now) {
-		t.Fatal("dream should be due six hours after the last run")
-	}
-	if dream.due(now.Add(-6*time.Hour+time.Minute), now) {
-		t.Fatal("dream should not be due before six hours have elapsed")
-	}
-	if next := dream.next(lastRun, now); !next.Equal(now) {
-		t.Fatalf("dream next due = %s, want %s", next, now)
+	at := time.Date(2026, 6, 10, 3, 0, 0, 0, time.Local)
+	for _, tc := range []struct {
+		name string
+		last time.Time
+		now  time.Time
+		due  bool
+		next time.Time
+	}{
+		{"before schedule", time.Time{}, at.Add(-time.Minute), false, at},
+		{"scheduled", time.Time{}, at, true, at},
+		{"wake later", at.AddDate(0, 0, -1), at.Add(9 * time.Hour), true, at.Add(9 * time.Hour)},
+		{"already ran", at, at.Add(18 * time.Hour), false, at.AddDate(0, 0, 1)},
+		{"next day", at, at.AddDate(0, 0, 1), true, at.AddDate(0, 0, 1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := dream.due(tc.last, tc.now); got != tc.due {
+				t.Fatalf("due=%v, want %v", got, tc.due)
+			}
+			if got := dream.next(tc.last, tc.now); !got.Equal(tc.next) {
+				t.Fatalf("next=%s, want %s", got, tc.next)
+			}
+		})
 	}
 }
 

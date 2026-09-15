@@ -47,12 +47,12 @@ Check memory before answering about people, companies, projects, preferences, de
 
 | Goal | MCP (jaz agents) | CLI |
 |---|---|---|
-| Answer a question | `memory_search {query, deep?}` → cited answer + gaps | `jazmem ask "…"` (`--deep`) |
+| Retrieve evidence | `memory_search {query, limit?, deep?}` → ranked page snippets | `jazmem search "…"` (`--deep`) |
 | Find pages to read/edit | use `memory_get_page` after | `jazmem "…"` / `jazmem search "…"` (raw ranked) |
 | Relational | `memory_search {query:"who works at Acme"}` | `jazmem "who works at Acme"`, `jazmem "what connects Alice and Riley"` |
 
-- `ask`/`memory_search` answer the user (LLM synthesis, needs the provider key); raw `jazmem search` finds pages deterministically (no LLM) — use it when selecting pages to read or edit.
-- `--deep` / `deep:true` is the only compute knob: wider candidate pool + two-hop link expansion, and a gap-driven second round for answers. An escalation, not a default. `--limit` doesn't affect answer mode.
+- `memory_search` and `jazmem search` retrieve ranked snippets directly, without an LLM or provider key. Interpret the evidence and cite the pages yourself. `jazmem ask` is a separate optional CLI synthesis command that calls an LLM; it is unnecessary inside an agent conversation.
+- `deep:true` widens retrieval and expands linked pages; use it when ordinary results are thin. MCP `limit` defaults to 10 and is capped at 50. CLI `ask --deep` also expands synthesis; `--limit` does not affect that separate answer mode.
 - Raw hits carry `modified_at` (staleness) and, when it matters, `via`: `relationship` (typed-edge match) or `link` (expansion neighbor, not a direct hit). `dreams/` pages are excluded from search; read them by slug.
 
 **When search misses:** reformulate with concrete nouns; try name variants and relational forms; `jazmem search --deep --limit 20 "…"`; read the closest hit raw and follow its wikilinks/`links`/`backlinks`; only then call it missing — and if a legitimate variant failed, add it as an alias.
@@ -203,7 +203,7 @@ What it is and the next concrete action. Blockers and who you're waiting on go i
 
 ## Maintenance & Anti-Patterns
 
-Jaz's scheduler runs indexing, six-hour dream consolidation, and link hygiene automatically. Don't run maintenance commands during ordinary memory work unless explicitly asked; never treat SQLite as truth.
+Jaz's scheduler runs indexing, scheduled dream consolidation, and link hygiene automatically. Don't run maintenance commands during ordinary memory work unless explicitly asked; never treat SQLite as truth.
 
 Avoid:
 
