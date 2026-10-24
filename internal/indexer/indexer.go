@@ -23,7 +23,7 @@ import (
 // graph as body wikilinks without being duplicated into prose.
 var frontmatterLinkFields = []string{"project"}
 
-const extractorHash = "jazmem-indexer-v2"
+const extractorHash = "jazmem-indexer-v3"
 
 type Indexer struct {
 	mu    sync.Mutex
@@ -42,10 +42,6 @@ type ExplicitLink struct {
 
 func buildIndex(ctx context.Context, pages, catalog []memfs.Page) (sqlitestore.IndexData, error) {
 	now := time.Now().UTC()
-	slugSet := map[string]bool{}
-	for _, page := range catalog {
-		slugSet[page.Slug] = true
-	}
 	resolver := newResolver(catalog)
 	gazetteer := buildGazetteer(catalog)
 
@@ -102,9 +98,6 @@ func buildIndex(ctx context.Context, pages, catalog []memfs.Page) (sqlitestore.I
 				Display:    link.Display,
 				Context:    link.Context,
 			})
-			if link.InRelationships {
-				data.Links = append(data.Links, inferTypedLinks(page.Slug, target, link)...)
-			}
 		}
 
 		for _, target := range frontmatterLinkTargets(page.Frontmatter) {
@@ -135,15 +128,25 @@ func buildIndex(ctx context.Context, pages, catalog []memfs.Page) (sqlitestore.I
 		if err != nil {
 			return sqlitestore.IndexData{}, err
 		}
-		for _, mention := range mentions {
-			if !slugSet[mention.ToSlug] || mention.ToSlug == page.Slug {
+		data.Links = append(data.Links, mentions...)
+		data.Chunks = append(data.Chunks, SplitChunks(page)...)
+	}
+	// Relationships can point back from the target, so rebuild this small
+	// shared projection rather than treating its rows as page-owned links.
+	for _, page := range catalog {
+		if err := ctx.Err(); err != nil {
+			return sqlitestore.IndexData{}, err
+		}
+		if !isTypedRelationshipNode(page.Slug) {
+			continue
+		}
+		for _, link := range ExtractExplicitLinks(StripCode(page.Body)) {
+			if !link.InRelationships {
 				continue
 			}
-			data.Links = append(data.Links, mention)
+			target, _ := resolver.Resolve(link.Target)
+			data.Links = append(data.Links, inferTypedLinks(page.Slug, target, link)...)
 		}
-
-		chunks := SplitChunks(page)
-		data.Chunks = append(data.Chunks, chunks...)
 	}
 	data.Links = dedupeLinks(data.Links)
 	sort.Slice(data.Aliases, func(a, b int) bool {
@@ -421,7 +424,7 @@ func inferTypedLinks(fromSlug, toSlug string, link ExplicitLink) []sqlitestore.L
 	if spec.Type == "" {
 		return nil
 	}
-	if !isTypedRelationshipNode(fromSlug) || !isTypedRelationshipNode(toSlug) {
+	if fromSlug == toSlug || !isTypedRelationshipNode(fromSlug) || !isTypedRelationshipNode(toSlug) {
 		return nil
 	}
 	if spec.Type == "friend" && (!isPersonSlug(fromSlug) || !isPersonSlug(toSlug)) {

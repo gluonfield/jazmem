@@ -11,6 +11,8 @@ import (
 	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/indexdb"
 )
 
+// UpdateIndex replaces the removed pages' data and the complete relationship
+// graph atomically. data.Links includes relationships from unchanged pages.
 func (s *Store) UpdateIndex(ctx context.Context, data IndexData, removed []string, catalog string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -18,6 +20,9 @@ func (s *Store) UpdateIndex(ctx context.Context, data IndexData, removed []strin
 	}
 	defer rollback(tx)
 	q := indexdb.New(tx)
+	if err := q.DeleteRelationshipLinks(ctx); err != nil {
+		return err
+	}
 	if len(removed) > 0 {
 		slugs, err := json.Marshal(removed)
 		if err != nil {

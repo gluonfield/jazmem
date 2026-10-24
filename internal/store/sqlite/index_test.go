@@ -9,6 +9,7 @@ func TestIndexUpdateRollsBackDeletionsOnFailure(t *testing.T) {
 	data := IndexData{
 		Pages:   []PageRecord{page},
 		Aliases: []AliasRecord{{Slug: page.Slug, Alias: "Alice", NormalizedAlias: "alice"}},
+		Links:   []LinkRecord{{FromSlug: "people/bob", ToSlug: page.Slug, LinkType: "friend", LinkSource: "relationship"}},
 		Chunks:  []ChunkRecord{{Slug: page.Slug, Body: "original content"}},
 	}
 	if err := store.UpdateIndex(t.Context(), data, nil, "original"); err != nil {
@@ -29,5 +30,9 @@ func TestIndexUpdateRollsBackDeletionsOnFailure(t *testing.T) {
 	entity, err := store.ResolveEntity(t.Context(), "Alice")
 	if err != nil || entity != page.Slug {
 		t.Fatalf("original alias lost: entity=%q err=%v", entity, err)
+	}
+	_, incoming, err := store.PageLinks(t.Context(), page.Slug)
+	if err != nil || len(incoming) != 1 || incoming[0].Slug != "people/bob" {
+		t.Fatalf("original relationship lost: links=%v err=%v", incoming, err)
 	}
 }

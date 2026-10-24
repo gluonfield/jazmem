@@ -63,6 +63,15 @@ func (q *Queries) DeletePageUnresolved(ctx context.Context, jsonEach interface{}
 	return err
 }
 
+const deleteRelationshipLinks = `-- name: DeleteRelationshipLinks :exec
+DELETE FROM links WHERE link_source = 'relationship'
+`
+
+func (q *Queries) DeleteRelationshipLinks(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteRelationshipLinks)
+	return err
+}
+
 const indexCatalog = `-- name: IndexCatalog :one
 SELECT value FROM index_state WHERE key = 'catalog'
 `

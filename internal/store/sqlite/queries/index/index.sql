@@ -13,6 +13,9 @@ DELETE FROM aliases WHERE slug IN (SELECT value FROM json_each(?));
 -- name: DeletePageLinks :exec
 DELETE FROM links WHERE from_slug IN (SELECT value FROM json_each(?));
 
+-- name: DeleteRelationshipLinks :exec
+DELETE FROM links WHERE link_source = 'relationship';
+
 -- name: DeletePageUnresolved :exec
 DELETE FROM unresolved_links WHERE from_slug IN (SELECT value FROM json_each(?));
 

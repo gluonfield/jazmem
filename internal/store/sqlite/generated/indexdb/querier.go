@@ -15,6 +15,7 @@ type Querier interface {
 	DeletePageIndex(ctx context.Context, jsonEach interface{}) error
 	DeletePageLinks(ctx context.Context, jsonEach interface{}) error
 	DeletePageUnresolved(ctx context.Context, jsonEach interface{}) error
+	DeleteRelationshipLinks(ctx context.Context) error
 	IndexCatalog(ctx context.Context) (string, error)
 	IndexCounts(ctx context.Context) (IndexCountsRow, error)
 	InsertAlias(ctx context.Context, arg InsertAliasParams) error
